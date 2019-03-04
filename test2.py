@@ -1,5 +1,5 @@
 #coding=utf-8
-#这个版本的是一个能够按照的思路运行的版本而已，但是现在提交成绩太差了，迫不得已只有进行接下来的开发咯
+#这个版本主要是为了实现一个回归版本的代码咯，之前的代码还有很多函数只能够做分类的问题的。
 
 #这个版本的目的在于从以下四方面提升性能：从数据上提升性能、从算法上提升性能、从算法调优上提升性能、从模型融合上提升性能（性能提升的力度按上表的顺序从上到下依次递减。）
 #具体内容可参加https://www.baidu.com/link?url=zdq_sTzndnIZrJL71ZFaLlHnfSblGnNXPzeilgVTaKG2RJEHTWHZHTzVkkipM0El&wd=&eqid=aa03b37b0004b870000000025c2f02e6
@@ -17,7 +17,7 @@
 #应该是我的gpu性能太差的缘故，同样价位的gpu性能是同样价位cpu性能的30倍左右吧，所以我现在新买了二手gpu。
 #（1）将保存文件的路径修改了。
 #（2）特征处理的流程需要修改。尤其是可能增加清除离群点的过程。
-#（3）record_best_model_acc的方式可能需要修改，或许我们需要换种方式获取最佳模型咯，不对好像暂时还不能修改这个东西。
+#（3）record_best_model_rmse的方式可能需要修改，或许我们需要换种方式获取最佳模型咯，不对好像暂时还不能修改这个东西。
 #（4）create_nn_module函数可能需要修改，因为每层都有dropout或者修改为其他结构如回归问题咯。
 #（5）noise_augment_dataframe_data可能需要修改，因为Y_train或许也需要增加噪声的。
 #（6）nn_f可能需要修改，因为noise_augment_dataframe_data的columns需要修改咯，还有评价准则可能需要优化或者不需要加噪声吧？但是暂时不知如何优化
@@ -339,13 +339,6 @@ def cal_rmse(Y_train_pred, Y_train):
     
     return rmse
 
-def cal_acc(Y_train_pred, Y_train):
-
-    count = (Y_train_pred == Y_train).sum()
-    acc = count/len(Y_train)
-    
-    return acc
-
 def cal_nnrsg_rmse(rsg, X_train, Y_train):
     
     Y_train_pred = rsg.predict(X_train.astype(np.float32))
@@ -357,29 +350,6 @@ def cal_nnrsg_rmse(rsg, X_train, Y_train):
     rmse = math.sqrt(mse+1e-6)
         
     return rmse
-    
-def cal_nnrsg_acc(rsg, X_train, Y_train):
-    
-    Y_train_pred = rsg.predict(X_train.astype(np.float32))
-    count = (Y_train_pred == Y_train).sum()
-    acc = count/len(Y_train)
-    
-    return acc
-
-def print_nnrsg_acc(acc):
-    
-    print("the accuracy rate of the model on the whole train dataset is:", acc)
-  
-def print_best_params_acc(trials):
-    
-    trials_list =[]
-    for item in trials.trials:
-        trials_list.append(item)
-    
-    trials_list.sort(key=lambda item: item["result"]["loss"])
-    
-    print("best parameter is:", trials_list[0])
-    print()
     
 def exist_files(title):
     
@@ -438,19 +408,9 @@ def record_best_model_rmse(rsg, rsme, best_model, best_rsme):
             best_model = rsg
             
     return best_model, best_rsme, flag
-    
-def record_best_model_acc(rsg, acc, best_model, best_acc):
-    
-    flag = False
-    
-    if not isclose(best_acc, acc):
-        if best_acc < acc:
-            flag = True
-            best_acc = acc
-            best_model = rsg
-            
-    return best_model, best_acc, flag
 
+#回归问题的create_nn_model和分类问题的create_nn_model完全不是一回事情哦
+#这个版本的create_nn_model的代码还有一些差异的，主要是因为softmax的问题吧。
 def create_nn_module(input_nodes, hidden_layers, hidden_nodes, output_nodes, percentage=0.1):
     
     module_list = []
@@ -461,7 +421,7 @@ def create_nn_module(input_nodes, hidden_layers, hidden_nodes, output_nodes, per
         module_list.append(nn.Dropout(percentage))
         module_list.append(nn.ReLU())
         #这边softmax的值域刚好就是(0,1)算是符合softmax的值域吧。
-        module_list.append(nn.Softmax())
+        module_list.append(nn.Linear(hidden_nodes, output_nodes))
         
     #当存在隐藏节点的时候
     else :
@@ -475,10 +435,6 @@ def create_nn_module(input_nodes, hidden_layers, hidden_nodes, output_nodes, per
             module_list.append(nn.ReLU())
              
         module_list.append(nn.Linear(hidden_nodes, output_nodes))
-        #module_list.append(nn.Dropout(percentage))
-        #module_list.append(nn.ReLU())
-        #这边softmax的值域刚好就是(0,1)算是符合softmax的值域吧。
-        #module_list.append(nn.Softmax())
             
     model = nn.Sequential()
     for i in range(0, len(module_list)):
@@ -559,7 +515,7 @@ def nn_f(params):
     rmse_list = []
     for i in range(0, 1):
         #这边的rsg需要由NeuralNetClassifier修改为NeuralNetRegressor类型
-        rsg = NeuralNetRegressor(lr = params["lr"],
+        rsg = NeuralNetRegressor( lr = params["lr"],
                                   optimizer__weight_decay = params["optimizer__weight_decay"],
                                   criterion = params["criterion"],
                                   batch_size = params["batch_size"],
@@ -593,7 +549,9 @@ def nn_f(params):
      
     print(metric)
     print()    
-    return -metric
+    #回归问题时，这里的方差应该越小越好吧
+    #分类问题时，这里的准确率应该越大越好吧
+    return metric
 
 def parse_nodes(trials, space_nodes):
     
@@ -671,11 +629,11 @@ def train_nn_model(nodes, X_train_scaled, Y_train, max_evals=10):
     
     #由于神经网络模型初始化、dropout等的问题导致网络不够稳定
     #解决这个问题的办法就是多重复计算几次，选择其中靠谱的模型
-    best_acc = 0.0
+    best_rmse= 99999999999
     best_model = 0.0
     for j in range(0, max_evals):
         
-        rsg = NeuralNetRegressor(lr = nodes["lr"],
+        rsg = NeuralNetRegressor( lr = nodes["lr"],
                                   optimizer__weight_decay = nodes["optimizer__weight_decay"],
                                   criterion = nodes["criterion"],
                                   batch_size = nodes["batch_size"],
@@ -688,13 +646,14 @@ def train_nn_model(nodes, X_train_scaled, Y_train, max_evals=10):
                                   optimizer = nodes["optimizer"]
                                   )
         init_module(rsg.module, nodes["weight_mode"], nodes["bias"])
-        rsg.fit(X_train_scaled.astype(np.float32), Y_train.astype(np.longlong))
+        rsg.fit(X_train_scaled.astype(np.float32), Y_train.astype(np.float32))
             
-        metric = cal_nnrsg_acc(rsg, X_train_scaled, Y_train)
-        print_nnrsg_acc(metric)
-        best_model, best_acc, flag = record_best_model_acc(rsg, metric, best_model, best_acc)        
+        metric = cal_nnrsg_rmse(rsg, X_train_scaled, Y_train)
+        print(metric)
+        
+        best_model, best_rmse, flag = record_best_model_rmse(rsg, metric, best_model, best_rmse)        
     
-    return best_model, best_acc
+    return best_model, best_rmse
 
 def train_nn_model_validate1(nodes, X_train_scaled, Y_train, max_evals=10):
     
@@ -734,7 +693,7 @@ def train_nn_model_validate1(nodes, X_train_scaled, Y_train, max_evals=10):
 def train_nn_model_validate2(nodes, X_train_scaled, Y_train, max_evals=10):
     
     #解决这个问题主要还是要靠cross_val_score这样才能够显示泛化性能吧。
-    best_acc = 0.0
+    best_rmse= 99999999999
     best_model = 0.0
     for j in range(0, max_evals):
         
@@ -752,14 +711,15 @@ def train_nn_model_validate2(nodes, X_train_scaled, Y_train, max_evals=10):
                                   )
         init_module(rsg.module, nodes["weight_mode"], nodes["bias"])
         
-        skf = StratifiedKFold(Y_train, n_folds=5, shuffle=True, random_state=None)
-        metric = cross_val_score(rsg, X_train_scaled.astype(np.float32), Y_train.astype(np.longlong), cv=skf, scoring="accuracy").mean()
-        print_nnrsg_acc(metric)
+        #这里好像是无法使用skf的呀，不对只是新的skf需要其他设置啊，需要修改Y_train的shape咯
+        #skf = StratifiedKFold(Y_train, n_folds=5, shuffle=True, random_state=None)
+        metric = cross_val_score(rsg, X_train_scaled.astype(np.float32), Y_train.astype(np.float32), cv=5, scoring="neg_mean_squared_error").mean()
+        print(metric)
         
-        best_model, best_acc, flag = record_best_model_acc(rsg, metric, best_model, best_acc)
+        best_model, best_rmse, flag = record_best_model_rmse(rsg, metric, best_model, best_rmse)
     
-    best_model.fit(X_train_scaled.astype(np.float32), Y_train.astype(np.longlong))
-    return best_model, best_acc
+    best_model.fit(X_train_scaled.astype(np.float32), Y_train.astype(np.float32))
+    return best_model, best_rmse
 
 def train_nn_model_noise_validate1(nodes, X_train_scaled, Y_train, max_evals=10):
     
@@ -768,7 +728,7 @@ def train_nn_model_noise_validate1(nodes, X_train_scaled, Y_train, max_evals=10)
     X_split_train, X_split_test, Y_split_train, Y_split_test = train_test_split(X_train_scaled, Y_train, test_size=0.05, stratify=Y_train)
     #由于神经网络模型初始化、dropout等的问题导致网络不够稳定
     #解决这个问题的办法就是多重复计算几次，选择其中靠谱的模型
-    best_acc = 0.0
+    best_rsme = 99999999999
     best_model = 0.0
     for j in range(0, max_evals):
         
@@ -785,13 +745,13 @@ def train_nn_model_noise_validate1(nodes, X_train_scaled, Y_train, max_evals=10)
                                   optimizer = nodes["optimizer"]
                                   )
         init_module(rsg.module, nodes["weight_mode"], nodes["bias"])
-        rsg.fit(X_split_train.astype(np.float32), Y_split_train.astype(np.longlong))
+        rsg.fit(X_split_train.astype(np.float32), Y_split_train.astype(np.float32))
             
-        metric = cal_nnrsg_acc(rsg, X_split_test, Y_split_test)
-        print_nnrsg_acc(metric)
-        best_model, best_acc, flag = record_best_model_acc(rsg, metric, best_model, best_acc)        
+        metric = cal_nnrsg_rmse(rsg, X_split_test, Y_split_test)
+        print(metric)
+        best_model, best_rmse, flag = record_best_model_rmse(rsg, metric, best_model, best_rmse)        
     
-    return best_model, best_acc
+    return best_model, best_rmse
 
 #然后在这里增加一次噪声和验证咯，感觉我把程序弄的真的好复杂呀？
 #或许我下一阶段的实验就是查看是否nn_f不加入噪声只是第二阶段增加噪声效果是否更好？
@@ -799,7 +759,7 @@ def train_nn_model_noise_validate2(nodes, X_train_scaled, Y_train, max_evals=10)
     
     X_split_train, X_split_test, Y_split_train, Y_split_test = train_test_split(X_train_scaled, Y_train, test_size=0.1, stratify=Y_train)
 
-    best_acc = 0.0
+    best_rsme = 99999999999
     best_model = 0.0
     for j in range(0, max_evals):
         
@@ -819,17 +779,17 @@ def train_nn_model_noise_validate2(nodes, X_train_scaled, Y_train, max_evals=10)
         
         X_noise_train, Y_noise_train = noise_augment_ndarray_data(nodes["mean"], nodes["std"], X_split_train, Y_split_train, columns=[i for i in range(1, 19)])
         
-        rsg.fit(X_noise_train.astype(np.float32), Y_noise_train.astype(np.longlong))
+        rsg.fit(X_noise_train.astype(np.float32), Y_noise_train.astype(np.float32))
             
-        metric = cal_nnrsg_acc(rsg, X_split_test, Y_split_test)
-        print_nnrsg_acc(metric)
-        best_model, best_acc, flag = record_best_model_acc(rsg, metric, best_model, best_acc)        
+        metric = cal_nnrsg_rmse(rsg, X_split_test, Y_split_test)
+        print(metric)
+        best_model, best_rmse, flag = record_best_model_rmse(rsg, metric, best_model, best_rmse)        
     
-    return best_model, best_acc
+    return best_model, best_rmse
 
 def train_nn_model_noise_validate3(nodes, X_train_scaled, Y_train, max_evals=10):
     
-    best_acc = 0.0
+    best_rsme = 99999999999
     best_model = 0.0
     
     #这一轮就使用这一份加噪声的数据就可以了吧？没有必要在下面的for循环中也添加吧？
@@ -857,17 +817,17 @@ def train_nn_model_noise_validate3(nodes, X_train_scaled, Y_train, max_evals=10)
                 
         #这边的折数由5折修改为10折吧，这样子的话应该更加能够表示出稳定性吧
         skf = StratifiedKFold(Y_noise_train, n_folds=10, shuffle=True, random_state=None)
-        metric = cross_val_score(rsg, X_noise_train.astype(np.float32), Y_noise_train.astype(np.longlong), cv=skf, scoring="accuracy").mean()
-        print_nnrsg_acc(metric)
+        metric = cross_val_score(rsg, X_noise_train.astype(np.float32), Y_noise_train.astype(np.float32), cv=skf, scoring="accuracy").mean()
+        print(metric)
         
-        best_model, best_acc, flag = record_best_model_acc(rsg, metric, best_model, best_acc)
+        best_model, best_rmse, flag = record_best_model_rmse(rsg, metric, best_model, best_rmse)
     
-    best_model.fit(X_train_scaled.astype(np.float32), Y_train.astype(np.longlong))
-    return best_model, best_acc
+    best_model.fit(X_train_scaled.astype(np.float32), Y_train.astype(np.float32))
+    return best_model, best_rmse
 
 def train_nn_model_noise_validate4(nodes, X_train_scaled, Y_train, max_evals=10):
     
-    best_acc = 0.0
+    best_rsme = 99999999999
     best_model = 0.0
     
     for j in range(0, max_evals):
@@ -892,13 +852,13 @@ def train_nn_model_noise_validate4(nodes, X_train_scaled, Y_train, max_evals=10)
                 
         #这边的折数由5折修改为10折吧，这样子的话应该更加能够表示出稳定性吧
         skf = StratifiedKFold(Y_noise_train, n_folds=10, shuffle=True, random_state=None)
-        metric = cross_val_score(rsg, X_noise_train.astype(np.float32), Y_noise_train.astype(np.longlong), cv=skf, scoring="accuracy").mean()
-        print_nnrsg_acc(metric)
+        metric = cross_val_score(rsg, X_noise_train.astype(np.float32), Y_noise_train.astype(np.float32), cv=skf, scoring="accuracy").mean()
+        print(metric)
         
-        best_model, best_acc, flag = record_best_model_acc(rsg, metric, best_model, best_acc)
+        best_model, best_rmse, flag = record_best_model_rmse(rsg, metric, best_model, best_rmse)
     
-    best_model.fit(X_train_scaled.astype(np.float32), Y_train.astype(np.longlong))
-    return best_model, best_acc
+    best_model.fit(X_train_scaled.astype(np.float32), Y_train.astype(np.float32))
+    return best_model, best_rmse
 
 def get_oof(nodes, X_train_scaled, Y_train, X_test_scaled, n_folds = 5, max_evals = 10):
     
@@ -916,7 +876,7 @@ def get_oof(nodes, X_train_scaled, Y_train, X_test_scaled, n_folds = 5, max_eval
         X_split_train, Y_split_train = X_train_scaled[train_index], Y_train[train_index]
         X_split_valida, Y_split_valida = X_train_scaled[valida_index], Y_train[valida_index]
         
-        best_model, best_acc = train_nn_model(nodes, X_split_train, Y_split_train, max_evals)
+        best_model, best_rmse= train_nn_model(nodes, X_split_train, Y_split_train, max_evals)
             
         rmse1 = cal_nnrsg_rmse(best_model, X_split_train, Y_split_train)
         print(rmse1)
@@ -925,8 +885,8 @@ def get_oof(nodes, X_train_scaled, Y_train, X_test_scaled, n_folds = 5, max_eval
         print(rmse2)
         valida_rmse.append(rmse2)
         
-        oof_train[valida_index] = best_model.predict(X_split_valida.astype(np.float32))
-        oof_test_all_fold[:, i] = best_model.predict(X_test_scaled.astype(np.float32))
+        oof_train[valida_index] = (best_model.predict(X_split_valida.astype(np.float32))).reshape(1,-1)
+        oof_test_all_fold[:, i] = (best_model.predict(X_test_scaled.astype(np.float32))).reshape(1,-1)
         
     oof_test = np.mean(oof_test_all_fold, axis=1)
     
@@ -948,7 +908,7 @@ def get_oof_validate1(nodes, X_train_scaled, Y_train, X_test_scaled, n_folds = 5
         X_split_train, Y_split_train = X_train_scaled[train_index], Y_train[train_index]
         X_split_valida, Y_split_valida = X_train_scaled[valida_index], Y_train[valida_index]
         
-        best_model, best_acc = train_nn_model_validate1(nodes, X_split_train, Y_split_train, max_evals)
+        best_model, best_rmse= train_nn_model_validate1(nodes, X_split_train, Y_split_train, max_evals)
         
         #这里输出的是最佳模型的训练集和验证集上面的结果咯
         #很容易和上面的训练过程的最后一个输出重叠
@@ -985,7 +945,7 @@ def get_oof_validate2(nodes, X_train_scaled, Y_train, X_test_scaled, n_folds = 5
         X_split_train, Y_split_train = X_train_scaled[train_index], Y_train[train_index]
         X_split_valida, Y_split_valida = X_train_scaled[valida_index], Y_train[valida_index]
         
-        best_model, best_acc = train_nn_model_validate2(nodes, X_split_train, Y_split_train, max_evals)
+        best_model, best_rmse= train_nn_model_validate2(nodes, X_split_train, Y_split_train, max_evals)
         
         rmse1 = cal_nnrsg_rmse(best_model, X_split_train, Y_split_train)
         print(rmse1)
@@ -993,9 +953,9 @@ def get_oof_validate2(nodes, X_train_scaled, Y_train, X_test_scaled, n_folds = 5
         rmse2 = cal_nnrsg_rmse(best_model, X_split_valida, Y_split_valida)
         print(rmse2)
         valida_rmse.append(rmse2)
-        
-        oof_train[valida_index] = best_model.predict(X_split_valida.astype(np.float32))
-        oof_test_all_fold[:, i] = best_model.predict(X_test_scaled.astype(np.float32))
+
+        oof_train[valida_index] = (best_model.predict(X_split_valida.astype(np.float32))).reshape(1,-1)
+        oof_test_all_fold[:, i] = (best_model.predict(X_test_scaled.astype(np.float32))).reshape(1,-1)
         
     oof_test = np.mean(oof_test_all_fold, axis=1)
     
@@ -1017,7 +977,7 @@ def get_oof_noise_validate1(nodes, X_train_scaled, Y_train, X_test_scaled, n_fol
         X_split_train, Y_split_train = X_train_scaled[train_index], Y_train[train_index]
         X_split_valida, Y_split_valida = X_train_scaled[valida_index], Y_train[valida_index]
         
-        best_model, best_acc = train_nn_model_noise_validate1(nodes, X_split_train, Y_split_train, max_evals)
+        best_model, best_rmse= train_nn_model_noise_validate1(nodes, X_split_train, Y_split_train, max_evals)
         
         rmse1 = cal_nnrsg_rmse(best_model, X_split_train, Y_split_train)
         print(rmse1)
@@ -1026,8 +986,8 @@ def get_oof_noise_validate1(nodes, X_train_scaled, Y_train, X_test_scaled, n_fol
         print(rmse2)
         valida_rmse.append(rmse2)
         
-        oof_train[valida_index] = best_model.predict(X_split_valida.astype(np.float32))
-        oof_test_all_fold[:, i] = best_model.predict(X_test_scaled.astype(np.float32))
+        oof_train[valida_index] = (best_model.predict(X_split_valida.astype(np.float32))).reshape(1,-1)
+        oof_test_all_fold[:, i] = (best_model.predict(X_test_scaled.astype(np.float32))).reshape(1,-1)
         
     oof_test = np.mean(oof_test_all_fold, axis=1)
     
@@ -1049,7 +1009,7 @@ def get_oof_noise_validate2(nodes, X_train_scaled, Y_train, X_test_scaled, n_fol
         X_split_train, Y_split_train = X_train_scaled[train_index], Y_train[train_index]
         X_split_valida, Y_split_valida = X_train_scaled[valida_index], Y_train[valida_index]
         
-        best_model, best_acc = train_nn_model_noise_validate2(nodes, X_split_train, Y_split_train, max_evals)
+        best_model, best_rmse= train_nn_model_noise_validate2(nodes, X_split_train, Y_split_train, max_evals)
         
         rmse1 = cal_nnrsg_rmse(best_model, X_split_train, Y_split_train)
         print(rmse1)
@@ -1081,7 +1041,7 @@ def get_oof_noise_validate3(nodes, X_train_scaled, Y_train, X_test_scaled, n_fol
         X_split_train, Y_split_train = X_train_scaled[train_index], Y_train[train_index]
         X_split_valida, Y_split_valida = X_train_scaled[valida_index], Y_train[valida_index]
         
-        best_model, best_acc = train_nn_model_noise_validate3(nodes, X_split_train, Y_split_train, max_evals)
+        best_model, best_rmse= train_nn_model_noise_validate3(nodes, X_split_train, Y_split_train, max_evals)
         
         rmse1 = cal_nnrsg_rmse(best_model, X_split_train, Y_split_train)
         print(rmse1)
@@ -1113,7 +1073,7 @@ def get_oof_noise_validate4(nodes, X_train_scaled, Y_train, X_test_scaled, n_fol
         X_split_train, Y_split_train = X_train_scaled[train_index], Y_train[train_index]
         X_split_valida, Y_split_valida = X_train_scaled[valida_index], Y_train[valida_index]
         
-        best_model, best_acc = train_nn_model_noise_validate4(nodes, X_split_train, Y_split_train, max_evals)
+        best_model, best_rmse= train_nn_model_noise_validate4(nodes, X_split_train, Y_split_train, max_evals)
         
         rmse1 = cal_nnrsg_rmse(best_model, X_split_train, Y_split_train)
         print(rmse1)
@@ -1264,107 +1224,6 @@ def stacked_features_noise_validate4(nodes_list, X_train_scaled, Y_train, X_test
     stacked_test = pd.DataFrame(stacked_test)
     return stacked_train, stacked_test
 
-#这个就是一个单节点神经网络预测咯，用下面的方法试试水咯
-def nn_predict(best_nodes, X_train_scaled, Y_train, X_test_scaled, folds=10, max_evals=50):
-
-    best_acc = 0.0
-    best_model = 0.0
-    
-    for j in range(0, max_evals):
-        #不对吧我在想是不是在这里面添加噪声更好一些呢，毕竟上面的噪声添加方式可能造成模型过渡拟合增加噪声之后的数据？？
-        #我不知道是不是在这里面增加噪声得到的效果会更好一些呢，我觉得很郁闷问题到底出现在哪里呀？
-
-        rsg = NeuralNetRegressor(lr = best_nodes["lr"],
-                                  optimizer__weight_decay = best_nodes["optimizer__weight_decay"],
-                                  criterion = best_nodes["criterion"],
-                                  batch_size = best_nodes["batch_size"],
-                                  optimizer__betas = best_nodes["optimizer__betas"],
-                                  module = create_nn_module(best_nodes["input_nodes"], best_nodes["hidden_layers"], 
-                                                         best_nodes["hidden_nodes"], best_nodes["output_nodes"], best_nodes["percentage"]),
-                                  max_epochs = best_nodes["max_epochs"],
-                                  callbacks=[skorch.callbacks.EarlyStopping(patience=best_nodes["patience"])],
-                                  device = best_nodes["device"],
-                                  optimizer = best_nodes["optimizer"]
-                                  )
-        init_module(rsg.module, best_nodes["weight_mode"], best_nodes["bias"])
-                
-        #这边的折数由5折修改为10折吧，这样子的话应该更加能够表示出稳定性吧
-        skf = StratifiedKFold(Y_train, n_folds=folds, shuffle=True, random_state=None)
-        metric = cross_val_score(rsg, X_train_scaled.astype(np.float32), Y_train.astype(np.longlong), cv=skf, scoring="accuracy").mean()
-        print_nnrsg_acc(metric)
-        
-        best_model, best_acc, flag = record_best_model_acc(rsg, metric, best_model, best_acc)
-    
-    best_model.fit(X_train_scaled.astype(np.float32), Y_train.astype(np.longlong))
-    
-    acc = cal_nnrsg_acc(best_model,  X_train_scaled, Y_train)
-    print_nnrsg_acc(acc)
-    
-    save_best_model(best_model, best_nodes["title"])
-    Y_pred = best_model.predict(X_test_scaled.astype(np.float32))        
-    data = {"PassengerId":data_test["PassengerId"], "Survived":Y_pred}
-    output = pd.DataFrame(data = data)
-    output.to_csv(best_nodes["path"], index=False)
-    print("prediction file has been written.")
-            
-    return best_model, best_acc
-
-#这个选择最佳模型的时候存在过拟合的风险
-def nn_stacking_predict(best_nodes, data_test, stacked_train, Y_train, stacked_test, max_evals=10):
-    
-    best_acc = 0.0
-    best_model = 0.0
-
-    #我已经将这份代码的best_nodes["title"]由原来的titanic改为stacked_titanic作为新版本
-    if (exist_files(best_nodes["title"])):
-        #在这里暂时不保存stakced_train以及stacked_test吧
-        best_model = load_best_model(best_nodes["title"]+"_"+str(len(nodes_list)))
-        best_acc = cal_nnrsg_acc(best_model, stacked_train.values, Y_train.values)
-         
-    for i in range(0, max_evals):
-        
-        #这边不是很想用train_nn_model代替下面的函数代码
-        #因为这下面的代码还涉及到预测输出的问题不好修改
-        print(str(i+1)+"/"+str(max_evals)+" prediction progress have been made.")
-        
-        rsg = NeuralNetRegressor(lr = best_nodes["lr"],
-                                  optimizer__weight_decay = best_nodes["optimizer__weight_decay"],
-                                  criterion = best_nodes["criterion"],
-                                  batch_size = best_nodes["batch_size"],
-                                  optimizer__betas = best_nodes["optimizer__betas"],
-                                  module = create_nn_module(stacked_train.columns.size, best_nodes["hidden_layers"], 
-                                                         best_nodes["hidden_nodes"], best_nodes["output_nodes"], best_nodes["percentage"]),
-                                  max_epochs = best_nodes["max_epochs"],
-                                  callbacks = [skorch.callbacks.EarlyStopping(patience=best_nodes["patience"])],
-                                  device = best_nodes["device"],
-                                  optimizer = best_nodes["optimizer"]
-                                  )
-        
-        init_module(rsg.module, best_nodes["weight_mode"], best_nodes["bias"])
-        
-        rsg.fit(stacked_train.values.astype(np.float32), Y_train.values.astype(np.longlong))
-        
-        metric = cal_nnrsg_acc(rsg, stacked_train.values, Y_train.values)
-        print_nnrsg_acc(metric)
-        
-        best_model, best_acc, flag = record_best_model_acc(rsg, metric, best_model, best_acc)
-    
-        if (flag):
-            #这个版本的best_model终于是全局的版本咯，真是开森呢。。
-            save_best_model(best_model, best_nodes["title"]+"_"+str(len(nodes_list)))
-            Y_pred = best_model.predict(stacked_test.values.astype(np.float32))
-            
-            data = {"PassengerId":data_test["PassengerId"], "Survived":Y_pred}
-            output = pd.DataFrame(data = data)
-            
-            output.to_csv(best_nodes["path"], index=False)
-            print("prediction file has been written.")
-        print()
-     
-    print("the best accuracy rate of the model on the whole train dataset is:", best_acc)
-    print()
-    return best_model, Y_pred
-   
 #这下面需要用均方差来进行比较的吧，而且回归问题中lr是没办法作为最后输出层的吧
 #难道尼玛用线性回归的模型来处理这个问题的么，因为好像mlr和逻辑回归是比较典型的
 #对于分类问题：逻辑回归只能够用到分类问题吧，顶多修改为softmax支持多类别回归
@@ -1394,9 +1253,11 @@ def lr_stacking_predict(nodes_list, data_test, stacked_train, Y_train, stacked_t
     print("prediction file has been written.")
     
     #这边的API确实是调用score。。
-    best_acc = rsg.score(stacked_train, Y_train) 
-    print("the best accuracy rate of the model on the whole train dataset is:", best_acc)
-    print()
+    #R^2 of self.predict(X) wrt. y.
+    best_score= rsg.score(stacked_train, Y_train) 
+    print(best_score)
+    best_rmse = cal_nnrsg_rmse(rsg, stacked_train, Y_train)
+    print(best_rmse)
     return rsg, Y_pred
 
 #lr没有超参搜索而且没有进行过cv怎么可能会取得好成绩呢？ 
@@ -1406,7 +1267,7 @@ def svm_stacking_predict(best_nodes, data_test, stacked_train, Y_train, stacked_
     param_dist = {"C": np.linspace(0.001, 100000, 10000)}
     random_search = RandomizedSearchCV(lsvr, param_distributions=param_dist, n_iter=max_evals)
     random_search.fit(stacked_train, Y_train)
-    best_acc = random_search.best_estimator_.score(stacked_train, Y_train)
+    best_rmse= random_search.best_estimator_.score(stacked_train, Y_train)
     lr_pred = random_search.best_estimator_.predict(stacked_test)
 
     save_best_model(random_search.best_estimator_, nodes_list[0]["title"]+"_"+str(len(nodes_list)))
@@ -1418,7 +1279,7 @@ def svm_stacking_predict(best_nodes, data_test, stacked_train, Y_train, stacked_
     output.to_csv(nodes_list[0]["path"], index=False)
     print("prediction file has been written.")
      
-    print("the best accuracy rate of the model on the whole train dataset is:", best_acc)
+    print("the best accuracy rate of the model on the whole train dataset is:", best_rmse)
     print()
     return random_search.best_estimator_, Y_pred
     
@@ -1533,6 +1394,7 @@ best_nodes = {"title":"stacked_house_prices",
               "optimizer":torch.optim.Adam
               }
 
+"""
 #这个主要是MSELoss的问题
 Y_train_temp = Y_train.values.reshape(-1,1)
 Y_train = pd.DataFrame(data=Y_train_temp.astype(np.float32), columns=['SalePrice'])
@@ -1542,13 +1404,36 @@ X_split_train, X_split_test, Y_split_train, Y_split_test = train_test_split(X_tr
 start_time = datetime.datetime.now()
 trials = Trials()
 algo = partial(tpe.suggest, n_startup_jobs=10)
-best_params = fmin(nn_f, space, algo=algo, max_evals=1, trials=trials)
+best_params = fmin(nn_f, space, algo=algo, max_evals=30, trials=trials)
 
 best_nodes = parse_nodes(trials, space_nodes)
 save_inter_params(trials, space_nodes, best_nodes, "house_price")
 
 #本来下面的做法应该是更好的做法但是由于计算量过大了，只能够用现在的方式计算咯
 nodes_list = [best_nodes, best_nodes]
+#stacked_train, stacked_test = stacked_features_noise_validate1(nodes_list, X_train_scaled, Y_train, X_test_scaled, 2, 1)
+stacked_train, stacked_test = stacked_features_validate2(nodes_list, X_train_scaled, Y_train, X_test_scaled, 2, 1)
+save_stacked_dataset(stacked_train, stacked_test, "house_price")
+lr_stacking_predict(nodes_list, data_test, stacked_train, Y_train, stacked_test, 2000)
+
+end_time = datetime.datetime.now()
+print("time cost", (end_time - start_time))
+"""
+
+#这个主要是MSELoss的问题
+Y_train_temp = Y_train.values.reshape(-1,1)
+Y_train = pd.DataFrame(data=Y_train_temp.astype(np.float32), columns=['SalePrice'])
+#这个拆分主要是为了超参搜索呢
+X_split_train, X_split_test, Y_split_train, Y_split_test = train_test_split(X_train_scaled, Y_train, test_size=0.14)
+
+start_time = datetime.datetime.now()
+files = open("house_price_intermediate_parameters_2019-3-4155918.pickle", "rb")
+trials, space_nodes, best_nodes = pickle.load(files)
+files.close()
+
+#本来下面的做法应该是更好的做法但是由于计算量过大了，只能够用现在的方式计算咯
+nodes_list = [best_nodes, best_nodes]
+#stacked_train, stacked_test = stacked_features_noise_validate1(nodes_list, X_train_scaled, Y_train, X_test_scaled, 2, 1)
 stacked_train, stacked_test = stacked_features_validate1(nodes_list, X_train_scaled, Y_train, X_test_scaled, 2, 2)
 save_stacked_dataset(stacked_train, stacked_test, "house_price")
 lr_stacking_predict(nodes_list, data_test, stacked_train, Y_train, stacked_test, 2000)
