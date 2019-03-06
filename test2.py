@@ -479,7 +479,12 @@ def noise_augment_dataframe_data(mean, std, X_train, Y_train, columns):
     row = X_train.shape[0]
     for i in range(0, row):
         for j in columns:
-            X_noise_train.iloc[i,[j]] +=  random.gauss(mean, std)
+            print(X_noise_train.iloc[i,[j]])
+            temp = random.gauss(mean, std)
+            print(temp)
+            X_noise_train.iloc[i,[j]] += temp
+            print(X_noise_train.iloc[i,[j]])
+            print(X_noise_train.iloc[i,j])
 
     return X_noise_train, Y_train
 
@@ -713,6 +718,7 @@ def train_nn_model_validate2(nodes, X_train_scaled, Y_train, max_evals=10):
         
         #这里好像是无法使用skf的呀，不对只是新的skf需要其他设置啊，需要修改Y_train的shape咯
         #skf = StratifiedKFold(Y_train, n_folds=5, shuffle=True, random_state=None)
+        #这里sklearn的均方误差是可以为负数的，我还以为是自己的代码出现了问题了呢
         metric = cross_val_score(rsg, X_train_scaled.astype(np.float32), Y_train.astype(np.float32), cv=5, scoring="neg_mean_squared_error").mean()
         print(metric)
         
@@ -1153,9 +1159,13 @@ def stacked_features_noise_validate1(nodes_list, X_train_scaled, Y_train, X_test
         
     for i in range(0, nodes_num):
     
-        #在这里增加一个添加噪声的功能咯
+        #在这里增加一个添加噪声的功能咯,这里发现了一个BUG，居然数据没有被修改
+        #不对，这个函数其实是对的，
         X_noise_train, Y_noise_train = noise_augment_dataframe_data(nodes_list[0]["mean"], nodes_list[0]["std"], X_train_scaled, Y_train, columns=[i for i in range(1, 20)])#columns=[])
-
+        X_train_scaled.to_csv("C:\\Users\\1\\Desktop\\temp2.csv", index=False)
+        X_noise_train.to_csv("C:\\Users\\1\\Desktop\\temp3.csv", index=False)
+        print(any(X_noise_train != X_train_scaled))
+        
         oof_train, oof_test, best_model= get_oof_noise_validate1(nodes_list[i], X_noise_train.values, Y_noise_train.values, X_test_scaled.values, folds, max_evals)
         input_train.append(oof_train)
         input_test.append(oof_test)
@@ -1433,8 +1443,9 @@ files.close()
 
 #本来下面的做法应该是更好的做法但是由于计算量过大了，只能够用现在的方式计算咯
 nodes_list = [best_nodes, best_nodes]
-#stacked_train, stacked_test = stacked_features_noise_validate1(nodes_list, X_train_scaled, Y_train, X_test_scaled, 2, 1)
-stacked_train, stacked_test = stacked_features_validate1(nodes_list, X_train_scaled, Y_train, X_test_scaled, 2, 2)
+#stacked_train, stacked_test = stacked_features_validate1(nodes_list, X_train_scaled, Y_train, X_test_scaled, 2, 1)
+X_train_scaled.to_csv("C:\\Users\\1\\Desktop\\temp1.csv", index=False)
+stacked_train, stacked_test = stacked_features_noise_validate1(nodes_list, X_train_scaled, Y_train, X_test_scaled, 2, 2)
 save_stacked_dataset(stacked_train, stacked_test, "house_price")
 lr_stacking_predict(nodes_list, data_test, stacked_train, Y_train, stacked_test, 2000)
 
