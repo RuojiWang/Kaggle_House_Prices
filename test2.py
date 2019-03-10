@@ -397,17 +397,17 @@ def load_best_model(title_and_nodes):
     
     return best_model
 
-def record_best_model_rmse(rsg, rsme, best_model, best_rsme):
+def record_best_model_rmse(rsg, rsme, best_model, best_rmse):
     
     flag = False
     
-    if not isclose(best_rsme, rsme):
-        if best_rsme > rsme:
+    if not isclose(best_rmse, rsme):
+        if best_rmse > rsme:
             flag = True
-            best_rsme = rsme
+            best_rmse = rsme
             best_model = rsg
             
-    return best_model, best_rsme, flag
+    return best_model, best_rmse, flag
 
 #回归问题的create_nn_model和分类问题的create_nn_model完全不是一回事情哦
 #这个版本的create_nn_model的代码还有一些差异的，主要是因为softmax的问题吧。
@@ -479,12 +479,7 @@ def noise_augment_dataframe_data(mean, std, X_train, Y_train, columns):
     row = X_train.shape[0]
     for i in range(0, row):
         for j in columns:
-            print(X_noise_train.iloc[i,[j]])
-            temp = random.gauss(mean, std)
-            print(temp)
-            X_noise_train.iloc[i,[j]] += temp
-            print(X_noise_train.iloc[i,[j]])
-            print(X_noise_train.iloc[i,j])
+            X_noise_train.iloc[i,[j]] += random.gauss(mean, std)
 
     return X_noise_train, Y_train
 
@@ -667,7 +662,7 @@ def train_nn_model_validate1(nodes, X_train_scaled, Y_train, max_evals=10):
     X_split_train, X_split_test, Y_split_train, Y_split_test = train_test_split(X_train_scaled, Y_train, test_size=0.14)
     #由于神经网络模型初始化、dropout等的问题导致网络不够稳定
     #解决这个问题的办法就是多重复计算几次，选择其中靠谱的模型
-    best_rsme = 99999999999
+    best_rmse = 99999999999
     best_model = 0.0
     for j in range(0, max_evals):
         
@@ -689,9 +684,9 @@ def train_nn_model_validate1(nodes, X_train_scaled, Y_train, max_evals=10):
         Y_pred = rsg.predict(X_split_test.astype(np.float32))
         metric = cal_rmse(Y_pred, Y_split_test)
         
-        best_model, best_rsme, flag = record_best_model_rmse(rsg, metric, best_model, best_rsme)        
+        best_model, best_rmse, flag = record_best_model_rmse(rsg, metric, best_model, best_rmse)        
     
-    return best_model, best_rsme
+    return best_model, best_rmse
 
 #这里面采用cross_val_score的方式应该更能够体现出泛化的性能吧。
 #这样的交叉验证才是最高效率的利用数据的方式吧。
@@ -731,10 +726,10 @@ def train_nn_model_noise_validate1(nodes, X_train_scaled, Y_train, max_evals=10)
     
     #我觉得0.12的设置有点多了，还有很多数据没用到呢，感觉这样子设置应该会好一些的吧？
     #X_split_train, X_split_test, Y_split_train, Y_split_test = train_test_split(X_train_scaled, Y_train, test_size=0.12, stratify=Y_train)
-    X_split_train, X_split_test, Y_split_train, Y_split_test = train_test_split(X_train_scaled, Y_train, test_size=0.05, stratify=Y_train)
+    X_split_train, X_split_test, Y_split_train, Y_split_test = train_test_split(X_train_scaled, Y_train, test_size=0.05)
     #由于神经网络模型初始化、dropout等的问题导致网络不够稳定
     #解决这个问题的办法就是多重复计算几次，选择其中靠谱的模型
-    best_rsme = 99999999999
+    best_rmse = 99999999999
     best_model = 0.0
     for j in range(0, max_evals):
         
@@ -763,9 +758,9 @@ def train_nn_model_noise_validate1(nodes, X_train_scaled, Y_train, max_evals=10)
 #或许我下一阶段的实验就是查看是否nn_f不加入噪声只是第二阶段增加噪声效果是否更好？
 def train_nn_model_noise_validate2(nodes, X_train_scaled, Y_train, max_evals=10):
     
-    X_split_train, X_split_test, Y_split_train, Y_split_test = train_test_split(X_train_scaled, Y_train, test_size=0.1, stratify=Y_train)
+    X_split_train, X_split_test, Y_split_train, Y_split_test = train_test_split(X_train_scaled, Y_train, test_size=0.1)
 
-    best_rsme = 99999999999
+    best_rmse = 99999999999
     best_model = 0.0
     for j in range(0, max_evals):
         
@@ -783,7 +778,7 @@ def train_nn_model_noise_validate2(nodes, X_train_scaled, Y_train, max_evals=10)
                                   )
         init_module(rsg.module, nodes["weight_mode"], nodes["bias"])
         
-        X_noise_train, Y_noise_train = noise_augment_ndarray_data(nodes["mean"], nodes["std"], X_split_train, Y_split_train, columns=[i for i in range(1, 19)])
+        X_noise_train, Y_noise_train = noise_augment_ndarray_data(nodes["mean"], nodes["std"], X_split_train, Y_split_train, columns=[])#columns=[i for i in range(1, 19)])
         
         rsg.fit(X_noise_train.astype(np.float32), Y_noise_train.astype(np.float32))
             
@@ -795,12 +790,12 @@ def train_nn_model_noise_validate2(nodes, X_train_scaled, Y_train, max_evals=10)
 
 def train_nn_model_noise_validate3(nodes, X_train_scaled, Y_train, max_evals=10):
     
-    best_rsme = 99999999999
+    best_rmse = 99999999999
     best_model = 0.0
     
     #这一轮就使用这一份加噪声的数据就可以了吧？没有必要在下面的for循环中也添加吧？
     #我好像真的只有用这种方式增加stacking模型之间的差异了吧？以提升泛化性能咯。
-    X_noise_train, Y_noise_train = noise_augment_ndarray_data(nodes["mean"], nodes["std"], X_train_scaled, Y_train, columns=[i for i in range(0, 19)])
+    X_noise_train, Y_noise_train = noise_augment_ndarray_data(nodes["mean"], nodes["std"], X_train_scaled, Y_train, columns=[])#columns=[i for i in range(0, 19)])
 
     for j in range(0, max_evals):
         
@@ -821,9 +816,7 @@ def train_nn_model_noise_validate3(nodes, X_train_scaled, Y_train, max_evals=10)
                                   )
         init_module(rsg.module, nodes["weight_mode"], nodes["bias"])
                 
-        #这边的折数由5折修改为10折吧，这样子的话应该更加能够表示出稳定性吧
-        skf = StratifiedKFold(Y_noise_train, n_folds=10, shuffle=True, random_state=None)
-        metric = cross_val_score(rsg, X_noise_train.astype(np.float32), Y_noise_train.astype(np.float32), cv=skf, scoring="accuracy").mean()
+        metric = cross_val_score(rsg, X_noise_train.astype(np.float32), Y_noise_train.astype(np.float32), cv=5, scoring="neg_mean_squared_error").mean()
         print(metric)
         
         best_model, best_rmse, flag = record_best_model_rmse(rsg, metric, best_model, best_rmse)
@@ -833,15 +826,14 @@ def train_nn_model_noise_validate3(nodes, X_train_scaled, Y_train, max_evals=10)
 
 def train_nn_model_noise_validate4(nodes, X_train_scaled, Y_train, max_evals=10):
     
-    best_rsme = 99999999999
+    best_rmse = 99999999999
     best_model = 0.0
     
     for j in range(0, max_evals):
         #不对吧我在想是不是在这里面添加噪声更好一些呢，毕竟上面的噪声添加方式可能造成模型过渡拟合增加噪声之后的数据？？
         #我不知道是不是在这里面增加噪声得到的效果会更好一些呢，我觉得很郁闷问题到底出现在哪里呀？
-        X_noise_train, Y_noise_train = noise_augment_ndarray_data(nodes["mean"], nodes["std"], X_train_scaled, Y_train, columns=[i for i in range(0, 19)])
+        X_noise_train, Y_noise_train = noise_augment_ndarray_data(nodes["mean"], nodes["std"], X_train_scaled, Y_train, columns = [])#columns=[i for i in range(0, 19)])
 
-        
         rsg = NeuralNetRegressor(lr = nodes["lr"],
                                   optimizer__weight_decay = nodes["optimizer__weight_decay"],
                                   criterion = nodes["criterion"],
@@ -857,8 +849,8 @@ def train_nn_model_noise_validate4(nodes, X_train_scaled, Y_train, max_evals=10)
         init_module(rsg.module, nodes["weight_mode"], nodes["bias"])
                 
         #这边的折数由5折修改为10折吧，这样子的话应该更加能够表示出稳定性吧
-        skf = StratifiedKFold(Y_noise_train, n_folds=10, shuffle=True, random_state=None)
-        metric = cross_val_score(rsg, X_noise_train.astype(np.float32), Y_noise_train.astype(np.float32), cv=skf, scoring="accuracy").mean()
+        #skf = StratifiedKFold(Y_noise_train, n_folds=10, shuffle=True, random_state=None)
+        metric = cross_val_score(rsg, X_noise_train.astype(np.float32), Y_noise_train.astype(np.float32), scoring="neg_mean_squared_error").mean()
         print(metric)
         
         best_model, best_rmse, flag = record_best_model_rmse(rsg, metric, best_model, best_rmse)
@@ -1024,8 +1016,8 @@ def get_oof_noise_validate2(nodes, X_train_scaled, Y_train, X_test_scaled, n_fol
         print(rmse2)
         valida_rmse.append(rmse2)
         
-        oof_train[valida_index] = best_model.predict(X_split_valida.astype(np.float32))
-        oof_test_all_fold[:, i] = best_model.predict(X_test_scaled.astype(np.float32))
+        oof_train[valida_index] = (best_model.predict(X_split_valida.astype(np.float32))).reshape(1,-1)
+        oof_test_all_fold[:, i] = (best_model.predict(X_test_scaled.astype(np.float32))).reshape(1,-1)
         
     oof_test = np.mean(oof_test_all_fold, axis=1)
     
@@ -1056,8 +1048,8 @@ def get_oof_noise_validate3(nodes, X_train_scaled, Y_train, X_test_scaled, n_fol
         print(rmse2)
         valida_rmse.append(rmse2)
         
-        oof_train[valida_index] = best_model.predict(X_split_valida.astype(np.float32))
-        oof_test_all_fold[:, i] = best_model.predict(X_test_scaled.astype(np.float32))
+        oof_train[valida_index] = (best_model.predict(X_split_valida.astype(np.float32))).reshape(1,-1)
+        oof_test_all_fold[:, i] = (best_model.predict(X_test_scaled.astype(np.float32))).reshape(1,-1)
         
     oof_test = np.mean(oof_test_all_fold, axis=1)
     
@@ -1088,8 +1080,8 @@ def get_oof_noise_validate4(nodes, X_train_scaled, Y_train, X_test_scaled, n_fol
         print(rmse2)
         valida_rmse.append(rmse2)
         
-        oof_train[valida_index] = best_model.predict(X_split_valida.astype(np.float32))
-        oof_test_all_fold[:, i] = best_model.predict(X_test_scaled.astype(np.float32))
+        oof_train[valida_index] = (best_model.predict(X_split_valida.astype(np.float32))).reshape(1,-1)
+        oof_test_all_fold[:, i] = (best_model.predict(X_test_scaled.astype(np.float32))).reshape(1,-1)
         
     oof_test = np.mean(oof_test_all_fold, axis=1)
     
@@ -1160,11 +1152,12 @@ def stacked_features_noise_validate1(nodes_list, X_train_scaled, Y_train, X_test
     for i in range(0, nodes_num):
     
         #在这里增加一个添加噪声的功能咯,这里发现了一个BUG，居然数据没有被修改
-        #不对，这个函数其实是对的，
-        X_noise_train, Y_noise_train = noise_augment_dataframe_data(nodes_list[0]["mean"], nodes_list[0]["std"], X_train_scaled, Y_train, columns=[i for i in range(1, 20)])#columns=[])
-        X_train_scaled.to_csv("C:\\Users\\1\\Desktop\\temp2.csv", index=False)
-        X_noise_train.to_csv("C:\\Users\\1\\Desktop\\temp3.csv", index=False)
-        print(any(X_noise_train != X_train_scaled))
+        #不对，这个函数其实是对的，测试了半天发现了其实问题是出在参数上面咯
+        X_noise_train, Y_noise_train = noise_augment_dataframe_data(nodes_list[0]["mean"], nodes_list[0]["std"], X_train_scaled, Y_train, columns=[])#columns=[i for i in range(1, 20)])
+        #X_noise_train, Y_noise_train = noise_augment_dataframe_data(0, 0.02, X_train_scaled, Y_train, columns=[i for i in range(1, 20)])
+        #X_train_scaled.to_csv("C:\\Users\\1\\Desktop\\temp2.csv", index=False)
+        #X_noise_train.to_csv("C:\\Users\\1\\Desktop\\temp3.csv", index=False)
+        #print(any(X_noise_train != X_train_scaled))
         
         oof_train, oof_test, best_model= get_oof_noise_validate1(nodes_list[i], X_noise_train.values, Y_noise_train.values, X_test_scaled.values, folds, max_evals)
         input_train.append(oof_train)
@@ -1444,8 +1437,7 @@ files.close()
 #本来下面的做法应该是更好的做法但是由于计算量过大了，只能够用现在的方式计算咯
 nodes_list = [best_nodes, best_nodes]
 #stacked_train, stacked_test = stacked_features_validate1(nodes_list, X_train_scaled, Y_train, X_test_scaled, 2, 1)
-X_train_scaled.to_csv("C:\\Users\\1\\Desktop\\temp1.csv", index=False)
-stacked_train, stacked_test = stacked_features_noise_validate1(nodes_list, X_train_scaled, Y_train, X_test_scaled, 2, 2)
+stacked_train, stacked_test = stacked_features_noise_validate4(nodes_list, X_train_scaled, Y_train, X_test_scaled, 2, 2)
 save_stacked_dataset(stacked_train, stacked_test, "house_price")
 lr_stacking_predict(nodes_list, data_test, stacked_train, Y_train, stacked_test, 2000)
 

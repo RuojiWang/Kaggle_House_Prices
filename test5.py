@@ -1,8 +1,8 @@
 #coding=utf-8
-#这个版本主要是为了改进回归效果很差的情况，目前为止我觉得最大的问题
-#看了几个攻略感觉心态炸了，还是数据太少了，不应该使用神经网络的方法
-#然后试验了一下，使用PCA之后不进行特征缩放，然而并没有什么卵用处，效果还是很差
-#我觉得现在的问题可能是出在神经网络的结构上面，神经网络的结构应该是无解的难题吧
+#这个版本主要是为了学习其他人的成功的经验，来制作神经网络的模型对于数据进行回归计算
+#这个版本去掉了Id这个属性，但是实验结果并没有得到多少改进，因为神经网络可以调整权重的吧
+#所以这个实验感觉非常的自闭症孤儿，只有在下个版本对这个实验的结果进行修正咯
+#目前主要是根据右边的链接来修改的代码https://www.kaggle.com/leostep/pytorch-dense-network-for-house-pricing-regression
 
 #这个版本的目的在于从以下四方面提升性能：从数据上提升性能、从算法上提升性能、从算法调优上提升性能、从模型融合上提升性能（性能提升的力度按上表的顺序从上到下依次递减。）
 #具体内容可参加https://www.baidu.com/link?url=zdq_sTzndnIZrJL71ZFaLlHnfSblGnNXPzeilgVTaKG2RJEHTWHZHTzVkkipM0El&wd=&eqid=aa03b37b0004b870000000025c2f02e6
@@ -138,8 +138,12 @@ data_all["BsmtFullBath"].fillna(data_all["BsmtFullBath"].mean(), inplace=True)
 
 data_train = pd.concat([data_train, temp], axis=1)
 
+data_all.to_csv("C:\\Users\\win7\\Desktop\\temp1.csv", index=False)
+ 
 #这个版本先做个之前的PCA就行了吧，预测的问题之后再说咯
 dict_vector = DictVectorizer(sparse=False)
+#这里之前没有drop Id，这大概是效果很差的原因之一吧
+data_all = data_all.drop(["Id"], axis=1)
 X_all = data_all
 X_all = dict_vector.fit_transform(X_all.to_dict(orient='record'))
 X_all = pd.DataFrame(data=X_all, columns=dict_vector.feature_names_)
@@ -1144,7 +1148,7 @@ space = {"title":hp.choice("title", ["stacked_house_prices"]),
                                       [[0.88, 0.9991], [0.88, 0.9993], [0.88, 0.9995], [0.88, 0.9997], [0.88, 0.9999],
                                        [0.90, 0.9991], [0.90, 0.9993], [0.90, 0.9995], [0.90, 0.9997], [0.90, 0.9999],
                                        [0.92, 0.9991], [0.92, 0.9993], [0.92, 0.9995], [0.92, 0.9997], [0.92, 0.9999]]),
-         "input_nodes":hp.choice("input_nodes", [293]),
+         "input_nodes":hp.choice("input_nodes", [292]),
          "hidden_layers":hp.choice("hidden_layers", [1, 3, 5, 7, 9, 11]), 
          "hidden_nodes":hp.choice("hidden_nodes", [300, 350, 400, 450, 500, 550, 600, 650, 700, 
                                                    750, 800, 850, 900, 950, 1000, 1050, 1100]), 
@@ -1186,7 +1190,7 @@ space_nodes = {"title":["stacked_house_prices"],
                "optimizer__betas":[[0.88, 0.9991], [0.88, 0.9993], [0.88, 0.9995], [0.88, 0.9997], [0.88, 0.9999],
                                    [0.90, 0.9991], [0.90, 0.9993], [0.90, 0.9995], [0.90, 0.9997], [0.90, 0.9999],
                                    [0.92, 0.9991], [0.92, 0.9993], [0.92, 0.9995], [0.92, 0.9997], [0.92, 0.9999]],
-               "input_nodes":[293],
+               "input_nodes":[292],
                "hidden_layers":[1, 3, 5, 7, 9, 11], 
                "hidden_nodes":[300, 350, 400, 450, 500, 550, 600, 650, 700, 
                                750, 800, 850, 900, 950, 1000, 1050, 1100], 
@@ -1211,7 +1215,7 @@ best_nodes = {"title":"stacked_house_prices",
               "criterion":torch.nn.MSELoss,
               "batch_size":128,
               "optimizer__betas":[0.86, 0.999],
-              "input_nodes":293,
+              "input_nodes":292,
               "hidden_layers":3, 
               "hidden_nodes":300, 
               "output_nodes":1,
@@ -1221,7 +1225,7 @@ best_nodes = {"title":"stacked_house_prices",
               "device":"cuda",
               "optimizer":torch.optim.Adam
               }
-
+"""
 #这个主要是MSELoss的问题
 Y_train_temp = Y_train.values.reshape(-1,1)
 Y_train = pd.DataFrame(data=Y_train_temp.astype(np.float32), columns=['SalePrice'])
@@ -1245,9 +1249,9 @@ lr_stacking_predict(nodes_list, data_test, stacked_train, Y_train, stacked_test,
 
 end_time = datetime.datetime.now()
 print("time cost", (end_time - start_time))
-
-
 """
+
+
 #这个主要是MSELoss的问题
 Y_train_temp = Y_train.values.reshape(-1,1)
 Y_train = pd.DataFrame(data=Y_train_temp.astype(np.float32), columns=['SalePrice'])
@@ -1255,7 +1259,7 @@ Y_train = pd.DataFrame(data=Y_train_temp.astype(np.float32), columns=['SalePrice
 X_split_train, X_split_test, Y_split_train, Y_split_test = train_test_split(X_train_scaled, Y_train, test_size=0.14)
 
 start_time = datetime.datetime.now()
-files = open("house_price_intermediate_parameters_2019-3-8212942.pickle", "rb")
+files = open("house_price_intermediate_parameters_2019-3-10174439.pickle", "rb")
 trials, space_nodes, best_nodes = pickle.load(files)
 files.close()
 
@@ -1268,4 +1272,3 @@ lr_stacking_predict(nodes_list, data_test, stacked_train, Y_train, stacked_test,
 
 end_time = datetime.datetime.now()
 print("time cost", (end_time - start_time))
-"""
