@@ -1,5 +1,8 @@
 #coding=utf-8
 #这个版本就是别人原版的代码咯，加上我的一些修改测试，以方便我找出现在的问题到底在哪里。
+#就是从这里得到的解决方案 https://www.kaggle.com/leostep/pytorch-dense-network-for-house-pricing-regression
+#目前为止发现计算的值应该是 torch.sqrt(criterion(torch.log(predictions), torch.log(y_val)))吧
+#所以所有的loss计算的时候都应该换算成为log的部分咯，怪不得我之前的模型怎么差距都是几万呢。。
 
 import numpy as np
 import pandas as pd
@@ -58,13 +61,14 @@ class Regressor(nn.Module):
         return x
 """
 
+"""
 class Regressor(nn.Module):
     def __init__(self):
         super().__init__()
         self.fc1 = nn.Linear(288, 300)
         self.fc2 = nn.Linear(300, 300)
         self.fc3 = nn.Linear(300, 300)
-        self.fc4 = nn.Linear(18, 1)
+        self.fc4 = nn.Linear(300, 1)
 
         #self.dropout = nn.Dropout(p=0.1)
 
@@ -79,6 +83,47 @@ class Regressor(nn.Module):
         x = F.relu(self.fc4(x))
 
         return x
+"""
+
+
+#这个函数是根据之前的create_nn_model而修改的，如果这个函数在这里可以正常运行，那么就不是模型的问题咯
+def Regressor():
+    
+    input_nodes = 288
+    hidden_layers = 3
+    hidden_nodes = 300 
+    output_nodes = 1
+    percentage=0
+    
+    module_list = []
+    
+    #当没有隐藏节点的时候
+    if(hidden_layers==0):
+        module_list.append(nn.Linear(input_nodes, output_nodes))
+        module_list.append(nn.Dropout(percentage))
+        module_list.append(nn.ReLU())
+        #这边softmax的值域刚好就是(0,1)算是符合softmax的值域吧。
+        module_list.append(nn.Linear(hidden_nodes, output_nodes))
+        
+    #当存在隐藏节点的时候
+    else :
+        module_list.append(nn.Linear(input_nodes, hidden_nodes))
+        module_list.append(nn.Dropout(percentage))
+        module_list.append(nn.ReLU())
+        
+        for i in range(0, hidden_layers):
+            module_list.append(nn.Linear(hidden_nodes, hidden_nodes))
+            module_list.append(nn.Dropout(percentage))
+            module_list.append(nn.ReLU())
+             
+        module_list.append(nn.Linear(hidden_nodes, output_nodes))
+            
+    model = nn.Sequential()
+    for i in range(0, len(module_list)):
+        model.add_module(str(i+1), module_list[i])
+    
+    return model
+
         
 train_batch = np.array_split(X_train, 50)
 label_batch = np.array_split(y_train, 50)
@@ -96,7 +141,7 @@ ps = model(train_batch[0])
 
 model = Regressor()
 criterion = nn.MSELoss()
-optimizer = optim.Adam(model.parameters(), lr=0.001)
+optimizer = optim.Adam(model.parameters(), lr=0.0006)
 
 epochs = 300
 
