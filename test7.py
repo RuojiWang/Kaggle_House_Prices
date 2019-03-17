@@ -1,8 +1,8 @@
 #coding=utf-8
 #这个版本修正了scoring的部分，我是说别人提交的怎么都是0.1的误差，而我的提交都是30000左右的误差
 #在修正scoring的基础上，增加了超参搜索的次数，以获得更加优异的结果咯。
-#然后在这个版本需要定义一个RMSELogLoss，具体的写法可以参考这下面的代码 
-#RMSE得到的结果和RMSELogLoss应该是正相关的，但是我很想知道实际的效果，所以必须实现这个函数
+#然后在这个版本需要定义一个RMSELoss，具体的写法可以参考这下面的代码 
+#RMSE得到的结果和RMSELoss应该是正相关的，但是我很想知道实际的效果，所以必须实现这个函数
 #https://discuss.pytorch.org/t/custom-loss-functions/29387
 
 #这个版本的目的在于从以下四方面提升性能：从数据上提升性能、从算法上提升性能、从算法调优上提升性能、从模型融合上提升性能（性能提升的力度按上表的顺序从上到下依次递减。）
@@ -159,14 +159,35 @@ Y_train = data_train["SalePrice"]
 
 #这个函数似乎需要修改,甚至有可能需要从类中继承过来
 #然后所有的和自己写的rmse相关的代码都需要修改（精简）
-#再然后需要添加一组rmse_log的相关计算函数。
+#再然后需要添加一组log_rmse的相关计算函数。
 #必须按照下面的方式定义一个Loss函数，Kaggle上面就是用这个函数
-class RMSELogLoss(nn.Module):
+class RMSELoss(nn.Module):
     def __init__(self):
-        super().__init__()
+        super(RMSELoss, self).__init__()
+        #super().__init__()
         
     def forward(self, pred, truth):
-        return torch.sqrt(torch.mean((torch.log(pred)-torch.log(truth))**2))
+        
+        """
+        temp1 = torch.log(pred)
+        temp2 = torch.log(truth)
+        temp3 = (temp1 - temp2)**2
+        temp4 = torch.mean(temp3)
+        temp5 = torch.sqrt(temp4)
+        
+        temp6 = torch.sqrt(torch.mean((torch.log(pred)-torch.log(truth))**2))
+        temp7 = torch.sqrt(torch.mean((pred-truth)**2))
+        temp8 = torch.mean((pred-truth)**2)
+        #print(temp5)
+        #print(temp6)
+        
+        return temp6
+        #因为pred可能是负数，所以temp1得到的就是nan了
+        #这个自定义损失函数的写法没有问题的，我试了一下MSE和RMSE没问题的
+        #所以，现在的打算就是将该函数写为RMSELoss，然后执行
+        #return torch.sqrt(torch.mean((torch.log(pred)-torch.log(truth))**2))
+        """
+        return torch.sqrt(torch.mean((pred-truth)**2))
 
 def isclose(a, b, rel_tol=1e-09, abs_tol=0.0):
     return abs(a-b) <= max(rel_tol * max(abs(a), abs(b)), abs_tol)    
@@ -198,12 +219,15 @@ def cal_rmse(Y_train_pred, Y_train):
     
     #当遇到nan的时候所有的数据都会变成nan
     error = Y_train_pred- Y_train
-    error = torch.from_numpy(error.values)
-    return float(torch.sqrt(torch.mean(error)**2))
+    error = torch.from_numpy(error)
+    return float(torch.sqrt(torch.mean(error*error)))
 
 def cal_log_rmse(Y_train_pred, Y_train):
-    
-    return float(torch.sqrt(torch.mean((torch.log(Y_train_pred)- torch.log(Y_train))**2)))
+
+    Y_train = torch.from_numpy(Y_train)
+    Y_train_pred = torch.from_numpy(Y_train_pred)
+    error = torch.log(Y_train_pred)- torch.log(Y_train)
+    return float(torch.sqrt(torch.mean(error*error)))
     
 """
 def cal_nnrsg_rmse(rsg, X_train, Y_train):
@@ -391,6 +415,7 @@ def nn_f(params):
     
     #我真的觉得这个做法很古怪，但是还是试一下吧，我的实践表明
     rmse_list = []
+    log_rmse_list = []
     for i in range(0, 1):
         #这边的rsg需要由NeuralNetClassifier修改为NeuralNetRegressor类型
         rsg = NeuralNetRegressor( lr = params["lr"],
@@ -416,23 +441,34 @@ def nn_f(params):
         rsg.fit(X_split_train.values.astype(np.float32), Y_split_train.values.astype(np.float32))
         
         Y_pred = rsg.predict(X_split_test.values.astype(np.float32))
-        rmse = cal_rmse(Y_pred, Y_split_test)  
+        rmse = cal_rmse(Y_pred, Y_split_test.values)  
         rmse_list.append(rmse)
+        log_rmse = cal_log_rmse(Y_pred, Y_split_test.values)
+        log_rmse_list.append(log_rmse)
     
-    sum = 0
+    rmse_sum = 0.0
+    log_rmse_sum = 0.0
     for i in range(0, len(rmse_list)):
-        sum += rmse_list[i]
         #如果存在nan的时候需要将其进行替换否则无法排序hyperopt报错= =！
         #当rmse_list(本身类型为float类型的变量)，下面的判断成立的时候rmse_list为nan
+        #只有极少数的情况下才会启用下面的判断咯
         if(rmse_list[i] != rmse_list[i]):
             rmse_list[i] = 99999999999.9
-    metric = sum/(len(rmse_list))
+        rmse_sum += rmse_list[i]
+        
+        if(log_rmse_list[i] != log_rmse_list[i]):
+            log_rmse_list[i] = 99999999999.9
+        log_rmse_sum += log_rmse_list[i]
+                
+    metric1 = rmse_sum/(len(rmse_list))
+    metric2 = log_rmse_sum/(len(log_rmse_list))
      
-    print(metric)
+    print(metric1)
+    print(metric2)
     print()    
     #回归问题时，这里的方差应该越小越好吧
     #分类问题时，这里的准确率应该越大越好吧
-    return metric
+    return metric1
 
 def parse_nodes(trials, space_nodes):
     
@@ -562,8 +598,8 @@ def train_nn_model_validate1(nodes, X_train_scaled, Y_train, max_evals=10):
         init_module(rsg.module, nodes["weight_mode"], nodes["bias"])
         rsg.fit(X_split_train.astype(np.float32), Y_split_train.astype(np.float32))
             
-        Y_pred = rsg.predict(X_split_test.astype(np.float32))
-        metric = cal_rmse(Y_pred, Y_split_test)
+        #Y_pred = rsg.predict(X_split_test.astype(np.float32))
+        metric = cal_nnrsg_rmse(rsg, X_split_test, Y_split_test)
         
         best_model, best_rmse, flag = record_best_model_rmse(rsg, metric, best_model, best_rmse)        
     
@@ -758,10 +794,14 @@ def get_oof(nodes, X_train_scaled, Y_train, X_test_scaled, n_folds = 5, max_eval
         best_model, best_rmse= train_nn_model(nodes, X_split_train, Y_split_train, max_evals)
             
         rmse1 = cal_nnrsg_rmse(best_model, X_split_train, Y_split_train)
+        log_rmse1 = cal_nnrsg_log_rmse(best_model, X_split_train, Y_split_train)
         print(rmse1)
+        print(log_rmse1)
         train_rmse.append(rmse1)
         rmse2 = cal_nnrsg_rmse(best_model, X_split_valida, Y_split_valida)
+        log_rmse2 = cal_nnrsg_log_rmse(best_model, X_split_valida, Y_split_valida)
         print(rmse2)
+        print(log_rmse2)
         valida_rmse.append(rmse2)
         
         oof_train[valida_index] = (best_model.predict(X_split_valida.astype(np.float32))).reshape(1,-1)
@@ -795,10 +835,14 @@ def get_oof_validate1(nodes, X_train_scaled, Y_train, X_test_scaled, n_folds = 5
         #第一个输出和第二个输出的区别在于普通模型和最佳模型在训练集上面的输出
         #第二个输出和第三个输出的区别在于最佳模型在训练集和验证集上面的输出
         rmse1 = cal_nnrsg_rmse(best_model, X_split_train, Y_split_train)
+        log_rmse1 = cal_nnrsg_log_rmse(best_model, X_split_train, Y_split_train)
         print(rmse1)
+        print(log_rmse1)
         train_rmse.append(rmse1)
         rmse2 = cal_nnrsg_rmse(best_model, X_split_valida, Y_split_valida)
+        log_rmse2 = cal_nnrsg_log_rmse(best_model, X_split_valida, Y_split_valida)
         print(rmse2)
+        print(log_rmse2)
         valida_rmse.append(rmse2)
         
         oof_train[valida_index] = (best_model.predict(X_split_valida.astype(np.float32))).reshape(1,-1)
@@ -827,10 +871,14 @@ def get_oof_validate2(nodes, X_train_scaled, Y_train, X_test_scaled, n_folds = 5
         best_model, best_rmse= train_nn_model_validate2(nodes, X_split_train, Y_split_train, max_evals)
         
         rmse1 = cal_nnrsg_rmse(best_model, X_split_train, Y_split_train)
+        log_rmse1 = cal_nnrsg_log_rmse(best_model, X_split_train, Y_split_train)
         print(rmse1)
+        print(log_rmse1)
         train_rmse.append(rmse1)
         rmse2 = cal_nnrsg_rmse(best_model, X_split_valida, Y_split_valida)
+        log_rmse2 = cal_nnrsg_log_rmse(best_model, X_split_valida, Y_split_valida)
         print(rmse2)
+        print(log_rmse2)
         valida_rmse.append(rmse2)
 
         oof_train[valida_index] = (best_model.predict(X_split_valida.astype(np.float32))).reshape(1,-1)
@@ -859,10 +907,14 @@ def get_oof_noise_validate1(nodes, X_train_scaled, Y_train, X_test_scaled, n_fol
         best_model, best_rmse= train_nn_model_noise_validate1(nodes, X_split_train, Y_split_train, max_evals)
         
         rmse1 = cal_nnrsg_rmse(best_model, X_split_train, Y_split_train)
+        log_rmse1 = cal_nnrsg_log_rmse(best_model, X_split_train, Y_split_train)
         print(rmse1)
+        print(log_rmse1)
         train_rmse.append(rmse1)
         rmse2 = cal_nnrsg_rmse(best_model, X_split_valida, Y_split_valida)
+        log_rmse2 = cal_nnrsg_log_rmse(best_model, X_split_valida, Y_split_valida)
         print(rmse2)
+        print(log_rmse2)
         valida_rmse.append(rmse2)
         
         oof_train[valida_index] = (best_model.predict(X_split_valida.astype(np.float32))).reshape(1,-1)
@@ -891,10 +943,14 @@ def get_oof_noise_validate2(nodes, X_train_scaled, Y_train, X_test_scaled, n_fol
         best_model, best_rmse= train_nn_model_noise_validate2(nodes, X_split_train, Y_split_train, max_evals)
         
         rmse1 = cal_nnrsg_rmse(best_model, X_split_train, Y_split_train)
+        log_rmse1 = cal_nnrsg_log_rmse(best_model, X_split_train, Y_split_train)
         print(rmse1)
+        print(log_rmse1)
         train_rmse.append(rmse1)
         rmse2 = cal_nnrsg_rmse(best_model, X_split_valida, Y_split_valida)
+        log_rmse2 = cal_nnrsg_log_rmse(best_model, X_split_valida, Y_split_valida)
         print(rmse2)
+        print(log_rmse2)
         valida_rmse.append(rmse2)
         
         oof_train[valida_index] = (best_model.predict(X_split_valida.astype(np.float32))).reshape(1,-1)
@@ -923,10 +979,14 @@ def get_oof_noise_validate3(nodes, X_train_scaled, Y_train, X_test_scaled, n_fol
         best_model, best_rmse= train_nn_model_noise_validate3(nodes, X_split_train, Y_split_train, max_evals)
         
         rmse1 = cal_nnrsg_rmse(best_model, X_split_train, Y_split_train)
+        log_rmse1 = cal_nnrsg_log_rmse(best_model, X_split_train, Y_split_train)
         print(rmse1)
+        print(log_rmse1)
         train_rmse.append(rmse1)
         rmse2 = cal_nnrsg_rmse(best_model, X_split_valida, Y_split_valida)
+        log_rmse2 = cal_nnrsg_log_rmse(best_model, X_split_valida, Y_split_valida)
         print(rmse2)
+        print(log_rmse2)
         valida_rmse.append(rmse2)
         
         oof_train[valida_index] = (best_model.predict(X_split_valida.astype(np.float32))).reshape(1,-1)
@@ -955,10 +1015,14 @@ def get_oof_noise_validate4(nodes, X_train_scaled, Y_train, X_test_scaled, n_fol
         best_model, best_rmse= train_nn_model_noise_validate4(nodes, X_split_train, Y_split_train, max_evals)
         
         rmse1 = cal_nnrsg_rmse(best_model, X_split_train, Y_split_train)
+        log_rmse1 = cal_nnrsg_log_rmse(best_model, X_split_train, Y_split_train)
         print(rmse1)
+        print(log_rmse1)
         train_rmse.append(rmse1)
         rmse2 = cal_nnrsg_rmse(best_model, X_split_valida, Y_split_valida)
+        log_rmse2 = cal_nnrsg_log_rmse(best_model, X_split_valida, Y_split_valida)
         print(rmse2)
+        print(log_rmse2)
         valida_rmse.append(rmse2)
         
         oof_train[valida_index] = (best_model.predict(X_split_valida.astype(np.float32))).reshape(1,-1)
@@ -1140,8 +1204,10 @@ def lr_stacking_predict(nodes_list, data_test, stacked_train, Y_train, stacked_t
     #R^2 of self.predict(X) wrt. y.
     best_score= rsg.score(stacked_train, Y_train) 
     print(best_score)
-    best_rmse = cal_nnrsg_rmse(rsg, stacked_train, Y_train)
+    best_rmse = cal_nnrsg_rmse(rsg, stacked_train.values, Y_train.values)
     print(best_rmse)
+    best_log_rmse = cal_nnrsg_log_rmse(rsg, stacked_train.values, Y_train.values)
+    print(best_log_rmse)
     return rsg, Y_pred
 
 #lr没有超参搜索而且没有进行过cv怎么可能会取得好成绩呢？ 
@@ -1193,7 +1259,7 @@ space = {"title":hp.choice("title", ["stacked_house_prices"]),
                                0.00161, 0.00162, 0.00163, 0.00164, 0.00165, 0.00166, 0.00167, 0.00168, 0.00169, 0.00170,
                                0.00171, 0.00172, 0.00173, 0.00174, 0.00175, 0.00176, 0.00177, 0.00178, 0.00179, 0.00180]),  
          "optimizer__weight_decay":hp.choice("optimizer__weight_decay",[0.000, 0.00000001, 0.000001, 0.0001, 0.01]),  
-         "criterion":hp.choice("criterion", [RMSELogLoss]),
+         "criterion":hp.choice("criterion", [RMSELoss]),
 
          "batch_size":hp.choice("batch_size", [128]),
          "optimizer__betas":hp.choice("optimizer__betas",
@@ -1237,7 +1303,7 @@ space_nodes = {"title":["stacked_house_prices"],
                      0.00161, 0.00162, 0.00163, 0.00164, 0.00165, 0.00166, 0.00167, 0.00168, 0.00169, 0.00170,
                      0.00171, 0.00172, 0.00173, 0.00174, 0.00175, 0.00176, 0.00177, 0.00178, 0.00179, 0.00180],
                "optimizer__weight_decay":[0.000, 0.00000001, 0.000001, 0.0001, 0.01],
-               "criterion":[RMSELogLoss],
+               "criterion":[RMSELoss],
                "batch_size":[128],
                "optimizer__betas":[[0.88, 0.9991], [0.88, 0.9993], [0.88, 0.9995], [0.88, 0.9997], [0.88, 0.9999],
                                    [0.90, 0.9991], [0.90, 0.9993], [0.90, 0.9995], [0.90, 0.9997], [0.90, 0.9999],
@@ -1264,7 +1330,7 @@ best_nodes = {"title":"stacked_house_prices",
               "patience":5,
               "lr":0.00010,
               "optimizer__weight_decay":0.005,
-              "criterion":RMSELogLoss,
+              "criterion":RMSELoss,
               "batch_size":128,
               "optimizer__betas":[0.86, 0.999],
               "input_nodes":292,
@@ -1287,7 +1353,7 @@ X_split_train, X_split_test, Y_split_train, Y_split_test = train_test_split(X_tr
 start_time = datetime.datetime.now()
 trials = Trials()
 algo = partial(tpe.suggest, n_startup_jobs=10)
-best_params = fmin(nn_f, space, algo=algo, max_evals=10, trials=trials)
+best_params = fmin(nn_f, space, algo=algo, max_evals=2, trials=trials)
 
 best_nodes = parse_nodes(trials, space_nodes)
 save_inter_params(trials, space_nodes, best_nodes, "house_price")
@@ -1295,13 +1361,14 @@ save_inter_params(trials, space_nodes, best_nodes, "house_price")
 #本来下面的做法应该是更好的做法但是由于计算量过大了，只能够用现在的方式计算咯
 nodes_list = [best_nodes, best_nodes]
 #stacked_train, stacked_test = stacked_features_noise_validate1(nodes_list, X_train_scaled, Y_train, X_test_scaled, 2, 1)
-stacked_train, stacked_test = stacked_features_validate1(nodes_list, X_train_scaled, Y_train, X_test_scaled, 2, 10)
+stacked_train, stacked_test = stacked_features_validate1(nodes_list, X_train_scaled, Y_train, X_test_scaled, 2, 2)
 #stacked_train, stacked_test = stacked_features_validate2(nodes_list, X_train_scaled, Y_train, X_test_scaled, 2, 2)
 save_stacked_dataset(stacked_train, stacked_test, "house_price")
 lr_stacking_predict(nodes_list, data_test, stacked_train, Y_train, stacked_test, 2000)
 
 end_time = datetime.datetime.now()
 print("time cost", (end_time - start_time))
+
 
 """
 #这个主要是MSELoss的问题
