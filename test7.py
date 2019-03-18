@@ -226,7 +226,7 @@ def cal_log_rmse(Y_train_pred, Y_train):
 
     Y_train = torch.from_numpy(Y_train)
     Y_train_pred = torch.from_numpy(Y_train_pred)
-    error = torch.log(Y_train_pred)- torch.log(Y_train)
+    error = torch.log(Y_train_pred).double() - torch.log(Y_train).double()
     return float(torch.sqrt(torch.mean(error*error)))
     
 """
