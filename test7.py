@@ -3,6 +3,7 @@
 #在修正scoring的基础上，增加了超参搜索的次数，以获得更加优异的结果咯。
 #然后在这个版本需要定义一个RMSELoss，具体的写法可以参考这下面的代码 
 #RMSE得到的结果和RMSELoss应该是正相关的，但是我很想知道实际的效果，所以必须实现这个函数
+#这个版本我本来还想找一些回归问题的经典模型，但是图像相关的问题是存在经典模型的，但是回归问题似乎不存在耶
 #https://discuss.pytorch.org/t/custom-loss-functions/29387
 
 #这个版本的目的在于从以下四方面提升性能：从数据上提升性能、从算法上提升性能、从算法调优上提升性能、从模型融合上提升性能（性能提升的力度按上表的顺序从上到下依次递减。）
@@ -344,6 +345,7 @@ def create_nn_module(input_nodes, hidden_layers, hidden_nodes, output_nodes, per
     
     return model
 
+"""
 def init_module(rsg, weight_mode, bias):
     
     for name, params in rsg.named_parameters():
@@ -372,6 +374,54 @@ def init_module(rsg, weight_mode, bias):
         
             else:
                 torch.nn.init.constant_(params, bias)
+"""
+
+#分成四种情况对nn.Linear、nn.Conv2d、nn.pool以及其他情况分别赋值吧
+#每种情况对应5种赋值熬，但是bias是否需要单独采用新的赋值方式？
+#那么现在决定将bias也采用之前的方式进行赋值吧，看看代码应该如何写呢
+#所以说现在就是使用weight_mode控制初始化的种类，bias控制具体的初始化值
+#将bias设定为靠近0的较小的固定值是我从深度学习的花书里面看到的
+
+#修改三个超参选择范围咯
+#还需要修改两个解析函数
+#修改到Titanic的模型
+#完善2的版本代码
+def init_module(rsg, weight_mode, bias):
+    
+    for layer in rsg.modules():
+        if isinstance(layer, nn.Linear):
+            if (weight_mode==1):
+                pass#weight和bias均使用pytorch默认的初始值
+
+            elif (weight_mode==2):
+                #使用xavier_normal_的方式初始化weight但是不改变默认bias
+                nn.init.xavier_normal_(layer.weight.data)
+                
+            elif (weight_mode==3):
+                #使用xavier_normal_的方式初始化weight和bias
+                nn.init.xavier_normal_(layer.weight.data)
+                nn.init.xavier_normal_(layer.bias.data)
+                
+            elif (weight_mode==4):
+                #使用xavier_normal_的方式初始化weight
+                #将bias的值设置为固定的值咯
+                nn.init.xavier_normal_(layer.weight.data)
+                nn.init.constant_(layer.bias.data, bias)
+                        
+            elif (weight_mode==5):
+                nn.init.xavier_uniform_(layer.weight.data)
+                
+            elif (weight_mode==4):
+                nn.init.kaiming_normal_(layer.weight.data)
+            
+            else:
+                nn.init.kaiming_uniform_(layer.weight.data)
+                            
+        elif isinstance(layer, nn.Conv2d):
+            layer.weight.data.normal_()#全连接层参数初始化
+            
+        else:
+            pass
         
 def noise_augment_dataframe_data(mean, std, X_train, Y_train, columns):
     
