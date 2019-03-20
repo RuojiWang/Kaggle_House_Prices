@@ -88,6 +88,7 @@ from sklearn.neural_network.multilayer_perceptron import MLPClassifier
 
 import seaborn as sns
 import matplotlib.pyplot as plt
+from blaze.compute.pandas import fancify_summary
 
 #加载文件
 data_train = pd.read_csv("train.csv")
@@ -382,46 +383,110 @@ def init_module(rsg, weight_mode, bias):
 #所以说现在就是使用weight_mode控制初始化的种类，bias控制具体的初始化值
 #将bias设定为靠近0的较小的固定值是我从深度学习的花书里面看到的
 
-#修改三个超参选择范围咯
-#还需要修改两个解析函数
+#pytorch nn.linear bias init 首先可能要查一下pytorch默认的初始化是怎么做的
+#这里提到了pytorch如何进行默认初始化的，似乎需要模拟实现如此的初始化过程
+#https://blog.csdn.net/u011668104/article/details/81670544
 #修改到Titanic的模型
 #完善2的版本代码
 def init_module(rsg, weight_mode, bias):
     
     for layer in rsg.modules():
+        #我本来想单独处理nn.Linear nn.Conv2d等
+        #但是处理的流程好像都是一样的，所以不用分开处理
+        #不对啊，nn.Conv2d
+        #目前这个可能会遇到dropout relu之类的
         if isinstance(layer, nn.Linear):
             if (weight_mode==1):
-                pass#weight和bias均使用pytorch默认的初始值
+                pass
+                #weight和bias均使用pytorch默认的初始值，也就是下面的赋值方式咯
+                #def reset_parameters(self):
+                #stdv = 1. / math.sqrt(self.weight.size(1))
+                #self.weight.data.uniform_(-stdv, stdv)
+                #if self.bias is not None:
+                #    self.bias.data.uniform_(-stdv, stdv)
 
+            #这下面是xavier_normal_的方式初始化的三种情况
             elif (weight_mode==2):
                 #使用xavier_normal_的方式初始化weight但是不改变默认bias
+                #可能两个函数的std存在差异，不知道是否能够交融在一起
+                #现在需要注意的是每个函数需要注意参数，使用默认参数可能造成weight和bias范围不搭
+                #uniform_的默认stdv值是stdv = 1. / math.sqrt(self.weight.size(1))
+                #xavier_normal_的默认std值是std = gain * math.sqrt(2.0 / (fan_in + fan_out))
+                #还好这两个参数的范围是搭的所以可以直接放在一起吧
                 nn.init.xavier_normal_(layer.weight.data)
                 
             elif (weight_mode==3):
                 #使用xavier_normal_的方式初始化weight和bias
                 nn.init.xavier_normal_(layer.weight.data)
-                nn.init.xavier_normal_(layer.bias.data)
+                #nn.init.xavier_normal_(layer.bias.data)
+                #这下面是模拟上面xavier_normal_的初始化方式
+                #特别注意了一下bias的std范围和xavier_normal_的是搭配的
+                std = 1.0 * math.sqrt(1.0 / layer.weight.data.size(0))
+                #这里不计算std的话，可能参数的范围和上面是不搭的
+                nn.init.normal_(layer.weight.bias, 0, std)
                 
             elif (weight_mode==4):
                 #使用xavier_normal_的方式初始化weight
-                #将bias的值设置为固定的值咯
+                #将bias的值设置为固定的值咯，这样一来好像需要设定很多bias候选值？
+                #感觉就提供五到十个选择吧，我理解bias区间范围还是比较窄的（从默认赋值看出）
                 nn.init.xavier_normal_(layer.weight.data)
                 nn.init.constant_(layer.bias.data, bias)
-                        
-            elif (weight_mode==5):
-                nn.init.xavier_uniform_(layer.weight.data)
                 
-            elif (weight_mode==4):
+            #接下来是xavier_uniform_初始化的三类情况
+            elif (weight_mode==5):
+                #xavier_uniform_的std = gain * math.sqrt(2.0 / (fan_in + fan_out))
+                #std = math.sqrt(3.0) * std
+                #这个std的默认范围和默认的bias的空间是不搭的，但是还是作为一种初始化方案吧
+                nn.init.xavier_uniform_(layer.weight.data)
+            
+            elif (weight_mode==6):
+                nn.init.xavier_uniform_(layer.weight.data)
+                #nn.init.xavier_uniform_(layer.bias.data)
+                #这下面是模拟上面xavier_uniform_的初始化方式
+                std = 1.0 * math.sqrt(1.0 / layer.weight.data.size(0))
+                std = math.sqrt(3.0) * std
+                #这里不计算std的话，可能参数的范围和上面是不搭的
+                nn.init.uniform_(layer.weight.bias, -std, std)
+                
+            elif (weight_mode==7):
+                nn.init.xavier_uniform_(layer.weight.data)
+                nn.init.constant_(layer.bias.data, bias)
+            
+            #接下来是kaiming_normal_初始化的三类情况
+            elif (weight_mode==8):
+                #使用kaiming_normal_的方式初始化weight但是不改变默认bias
                 nn.init.kaiming_normal_(layer.weight.data)
+                
+            elif (weight_mode==9):
+                nn.init.kaiming_normal_(layer.weight.data)
+                gain = math.sqrt(2.0 / (1 + 0** 2))
+                fan = layer.bias.data.size(0)
+                std = gain / fan
+                nn.init.normal_(layer.bias.data, 0, std)
             
-            else:
+            elif (weight_mode==10):
+                nn.init.kaiming_normal_(layer.weight.data)
+                nn.init.constant_(layer.bias.data, bias)
+                
+            #接下来是kaiming_uniform_初始化的三类情况
+            elif (weight_mode==11):
+                #使用kaiming_uniform_的方式初始化weight但是不改变默认bias
                 nn.init.kaiming_uniform_(layer.weight.data)
-                            
-        elif isinstance(layer, nn.Conv2d):
-            layer.weight.data.normal_()#全连接层参数初始化
+                
+            elif (weight_mode==12):
+                nn.init.kaiming_uniform_(layer.weight.data)
+                gain = math.sqrt(2.0 / (1 + 0** 2))
+                fan = layer.bias.data.size(0)
+                std = gain / math.sqrt(fan)
+                std = math.sqrt(3.0) * std
+                nn.init.uniform_(layer.bias.data, -std, std)
             
-        else:
-            pass
+            elif (weight_mode==13):
+                nn.init.kaiming_uniform_(layer.weight.data)
+                nn.init.constant_(layer.bias.data, bias)                
+                
+            else:
+                pass
         
 def noise_augment_dataframe_data(mean, std, X_train, Y_train, columns):
     
@@ -1322,8 +1387,8 @@ space = {"title":hp.choice("title", ["stacked_house_prices"]),
                                                    750, 800, 850, 900, 950, 1000, 1050, 1100]), 
          "output_nodes":hp.choice("output_nodes", [1]),
          "percentage":hp.choice("percentage", [0.10, 0.20, 0.30, 0.40, 0.50, 0.60]),
-         "weight_mode":hp.choice("weight_mode", [1]),
-         "bias":hp.choice("bias", [0]),
+         "weight_mode":hp.choice("weight_mode", [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13]),
+         "bias":hp.choice("bias", [-0.6, -0.4, -0.2, 0, 0.2, 0.4]),
          "device":hp.choice("device", ["cpu"]),
          "optimizer":hp.choice("optimizer", [torch.optim.Adam])
          }
@@ -1364,8 +1429,9 @@ space_nodes = {"title":["stacked_house_prices"],
                                750, 800, 850, 900, 950, 1000, 1050, 1100], 
                "output_nodes":[1],
                "percentage":[0.10, 0.20, 0.30, 0.40, 0.50, 0.60],
-               "weight_mode":[1],
-               "bias":[0],
+               "weight_mode":[1, 2, 3, 4, 5, 6, 7,
+                              8, 9, 10, 11, 12, 13],
+               "bias":[-0.6, -0.4, -0.2, 0, 0.2, 0.4],
                "device":["cpu"],
                "optimizer":[torch.optim.Adam]
                }
