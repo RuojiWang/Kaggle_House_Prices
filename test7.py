@@ -346,37 +346,6 @@ def create_nn_module(input_nodes, hidden_layers, hidden_nodes, output_nodes, per
     
     return model
 
-"""
-def init_module(rsg, weight_mode, bias):
-    
-    for name, params in rsg.named_parameters():
-        if name.find("weight") != -1:
-            if (weight_mode==1):
-                pass
-        
-            elif (weight_mode==2):
-                torch.nn.init.normal_(params)
-        
-            elif (weight_mode==3):
-                torch.nn.init.xavier_normal_(params)
-        
-            else:
-                torch.nn.init.xavier_uniform_(params)
-        
-        if name.find("bias") != -1:
-            if (weight_mode==1):
-                pass
-        
-            elif (weight_mode==2):
-                torch.nn.init.constant_(params, bias)
-        
-            elif (weight_mode==3):
-                torch.nn.init.constant_(params, bias)
-        
-            else:
-                torch.nn.init.constant_(params, bias)
-"""
-
 #分成四种情况对nn.Linear、nn.Conv2d、nn.pool以及其他情况分别赋值吧
 #每种情况对应5种赋值熬，但是bias是否需要单独采用新的赋值方式？
 #那么现在决定将bias也采用之前的方式进行赋值吧，看看代码应该如何写呢
@@ -386,10 +355,11 @@ def init_module(rsg, weight_mode, bias):
 #pytorch nn.linear bias init 首先可能要查一下pytorch默认的初始化是怎么做的
 #这里提到了pytorch如何进行默认初始化的，似乎需要模拟实现如此的初始化过程
 #https://blog.csdn.net/u011668104/article/details/81670544
+#这个设计其实存在一个问题：就是bias只有在weiht_mode取某些值的时候才有效，单这个设计还行吧
 #修改到Titanic的模型
 #完善2的版本代码
 def init_module(rsg, weight_mode, bias):
-    
+
     for layer in rsg.modules():
         #我本来想单独处理nn.Linear nn.Conv2d等
         #但是处理的流程好像都是一样的，所以不用分开处理
@@ -423,7 +393,7 @@ def init_module(rsg, weight_mode, bias):
                 #特别注意了一下bias的std范围和xavier_normal_的是搭配的
                 std = 1.0 * math.sqrt(1.0 / layer.weight.data.size(0))
                 #这里不计算std的话，可能参数的范围和上面是不搭的
-                nn.init.normal_(layer.weight.bias, 0, std)
+                nn.init.normal_(layer.bias.data, 0, std)
                 
             elif (weight_mode==4):
                 #使用xavier_normal_的方式初始化weight
@@ -446,7 +416,7 @@ def init_module(rsg, weight_mode, bias):
                 std = 1.0 * math.sqrt(1.0 / layer.weight.data.size(0))
                 std = math.sqrt(3.0) * std
                 #这里不计算std的话，可能参数的范围和上面是不搭的
-                nn.init.uniform_(layer.weight.bias, -std, std)
+                nn.init.uniform_(layer.bias.data, -std, std)
                 
             elif (weight_mode==7):
                 nn.init.xavier_uniform_(layer.weight.data)
@@ -1294,6 +1264,8 @@ def stacked_features_noise_validate4(nodes_list, X_train_scaled, Y_train, X_test
 #如果线性回归模型不行的话，我可能会采用单模型进行比赛吧
 #算了自习想了一下，我觉得应该用svm做线性回归可能效果更好一些的吧，那我再写一个svm的版本咯
 #我查到一个kernel居然第二层采用平均的方式进行stacking，回归问题好像可以这么干但是分类不行吧
+#我之前对于stacking的理解是存在错误的，我现在才发现其实用meta_clf对stacked_train, Y_train进行fit就是stacking咯
+#我查了一下别人使用lasso作为回归问题的meta_clf的，所以可能我自己需要实现一个lasso版本的代码咯
 def lr_stacking_predict(nodes_list, data_test, stacked_train, Y_train, stacked_test, max_evals=2000):
     
     rsg = LinearRegression()
@@ -1388,7 +1360,11 @@ space = {"title":hp.choice("title", ["stacked_house_prices"]),
          "output_nodes":hp.choice("output_nodes", [1]),
          "percentage":hp.choice("percentage", [0.10, 0.20, 0.30, 0.40, 0.50, 0.60]),
          "weight_mode":hp.choice("weight_mode", [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13]),
-         "bias":hp.choice("bias", [-0.6, -0.4, -0.2, 0, 0.2, 0.4]),
+         #这个按照deep learning那本书的说法，应该是设置为靠近0的很小的常数值
+         #但是这个区间我有点拿不准，所以我可能要参考一下之前赋值方式的取值范围咯
+         #我按照赋值的方式对于偏置的范围进行计算，偏置几乎不会大于[-0.1, 0.1]
+         #我测算了一下，按照普通的计算方式，下面的取值范围应该是比较合适的吧
+         "bias":hp.choice("bias", [-0.03, -0.02, -0.01, 0, 0.01, 0.02, 0.03]),
          "device":hp.choice("device", ["cpu"]),
          "optimizer":hp.choice("optimizer", [torch.optim.Adam])
          }
@@ -1431,7 +1407,7 @@ space_nodes = {"title":["stacked_house_prices"],
                "percentage":[0.10, 0.20, 0.30, 0.40, 0.50, 0.60],
                "weight_mode":[1, 2, 3, 4, 5, 6, 7,
                               8, 9, 10, 11, 12, 13],
-               "bias":[-0.6, -0.4, -0.2, 0, 0.2, 0.4],
+               "bias":[-0.03, -0.02, -0.01, 0, 0.01, 0.02, 0.03],
                "device":["cpu"],
                "optimizer":[torch.optim.Adam]
                }
@@ -1450,8 +1426,8 @@ best_nodes = {"title":"stacked_house_prices",
               "batch_size":128,
               "optimizer__betas":[0.86, 0.999],
               "input_nodes":292,
-              "hidden_layers":3, 
-              "hidden_nodes":300, 
+              "hidden_layers":3,
+              "hidden_nodes":300,
               "output_nodes":1,
               "percentage":0.2,
               "weight_mode":1,
@@ -1460,7 +1436,7 @@ best_nodes = {"title":"stacked_house_prices",
               "optimizer":torch.optim.Adam
               }
 
-#这个主要是MSELoss的问题
+#这个主要是RMSELoss的问题，使用RMSELoss必须要采用这个熬
 Y_train_temp = Y_train.values.reshape(-1,1)
 Y_train = pd.DataFrame(data=Y_train_temp.astype(np.float32), columns=['SalePrice'])
 #这个拆分主要是为了超参搜索呢
@@ -1484,7 +1460,6 @@ lr_stacking_predict(nodes_list, data_test, stacked_train, Y_train, stacked_test,
 
 end_time = datetime.datetime.now()
 print("time cost", (end_time - start_time))
-
 
 """
 #这个主要是MSELoss的问题
