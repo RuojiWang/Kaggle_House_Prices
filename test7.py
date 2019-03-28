@@ -81,7 +81,7 @@ from sklearn.decomposition import PCA
 from mlxtend.classifier import StackingCVClassifier
 
 from sklearn.linear_model.logistic import LogisticRegressionCV
-from sklearn.linear_model import LogisticRegression, LinearRegression
+from sklearn.linear_model import LogisticRegression, LinearRegression, Lasso, LassoCV, LassoLarsCV 
 from nltk.classify.svm import SvmClassifier
 from sklearn.ensemble.weight_boosting import AdaBoostClassifier
 from sklearn.neural_network.multilayer_perceptron import MLPClassifier
@@ -1297,7 +1297,38 @@ def lr_stacking_predict(nodes_list, data_test, stacked_train, Y_train, stacked_t
     print(best_log_rmse)
     return rsg, Y_pred
 
-#lr没有超参搜索而且没有进行过cv怎么可能会取得好成绩呢？ 
+def lasso_stacking_rscv_predict(nodes_list, data_test, stacked_train, Y_train, stacked_test, max_evals=50):
+    
+    #Lasso回归的损失函数优化方法常用的有两种，坐标轴下降法和最小角回归法。
+    #LassoLars类采用的是最小角回归法，前面讲到的Lasso类采用的是坐标轴下降法。
+    #Lasso加上RandomizedSearchCV，基本上就大于LassoCV的，毕竟后者只是CV别个参数呢
+    rsg = Lasso()
+    param_dist = {"penalty": ["l1", "l2"],
+                  "C": np.linspace(0.001, 100000, 10000),
+                  "fit_intercept": [True, False],
+                  #"solver": ["newton-cg", "lbfgs", "liblinear", "sag"]
+                  }
+    random_search = RandomizedSearchCV(rsg, param_distributions=param_dist, n_iter=max_evals)
+    random_search.fit(stacked_train, Y_train)
+    best_acc = random_search.best_estimator_.score(stacked_train, Y_train)
+    lr_pred = random_search.best_estimator_.predict(stacked_test)
+
+    save_best_model(random_search.best_estimator_, nodes_list[0]["title"]+"_"+str(len(nodes_list)))
+    Y_pred = random_search.best_estimator_.predict(stacked_test.values.astype(np.float32))
+            
+    data = {"PassengerId":data_test["PassengerId"], "Survived":Y_pred}
+    output = pd.DataFrame(data = data)
+            
+    output.to_csv(nodes_list[0]["path"], index=False)
+    print("prediction file has been written.")
+     
+    print("the best accuracy rate of the model on the whole train dataset is:", best_acc)
+    print()
+    return random_search.best_estimator_, Y_pred
+
+    
+#这个函数执行过程奇慢无比，两次迭代居然几分钟都还没计算完，我真的哔了狗了
+#我本来还说用这个函数来做个对比实验的，现在看起来做尼玛呢，完全没办法运行吧
 def svm_stacking_predict(best_nodes, data_test, stacked_train, Y_train, stacked_test, max_evals=50):
     
     lsvr = svm.SVR(kernel='linear')
@@ -1436,10 +1467,10 @@ best_nodes = {"title":"stacked_house_prices",
               "optimizer":torch.optim.Adam
               }
 
+"""
 #这个主要是RMSELoss的问题，使用RMSELoss必须要采用这个熬
 Y_train_temp = Y_train.values.reshape(-1,1)
 Y_train = pd.DataFrame(data=Y_train_temp.astype(np.float32), columns=['SalePrice'])
-#这个拆分主要是为了超参搜索呢
 X_split_train, X_split_test, Y_split_train, Y_split_test = train_test_split(X_train_scaled, Y_train, test_size=0.14)
 
 start_time = datetime.datetime.now()
@@ -1450,22 +1481,23 @@ best_params = fmin(nn_f, space, algo=algo, max_evals=2, trials=trials)
 best_nodes = parse_nodes(trials, space_nodes)
 save_inter_params(trials, space_nodes, best_nodes, "house_price")
 
-#本来下面的做法应该是更好的做法但是由于计算量过大了，只能够用现在的方式计算咯
 nodes_list = [best_nodes, best_nodes]
-#stacked_train, stacked_test = stacked_features_noise_validate1(nodes_list, X_train_scaled, Y_train, X_test_scaled, 2, 1)
 stacked_train, stacked_test = stacked_features_validate1(nodes_list, X_train_scaled, Y_train, X_test_scaled, 2, 2)
 #stacked_train, stacked_test = stacked_features_validate2(nodes_list, X_train_scaled, Y_train, X_test_scaled, 2, 2)
 save_stacked_dataset(stacked_train, stacked_test, "house_price")
-lr_stacking_predict(nodes_list, data_test, stacked_train, Y_train, stacked_test, 2000)
+#lr_stacking_predict(nodes_list, data_test, stacked_train, Y_train, stacked_test, 2000)
+Y_train_temp = Y_train.values.flatten()
+Y_train = pd.DataFrame(data=Y_train_temp.astype(np.float32), columns=['SalePrice'])
+svm_stacking_predict(nodes_list, data_test, stacked_train, Y_train, stacked_test, 2000)
 
 end_time = datetime.datetime.now()
 print("time cost", (end_time - start_time))
+"""
 
 """
-#这个主要是MSELoss的问题
+#这个主要是RMSELoss的问题，使用RMSELoss必须要采用这个熬
 Y_train_temp = Y_train.values.reshape(-1,1)
 Y_train = pd.DataFrame(data=Y_train_temp.astype(np.float32), columns=['SalePrice'])
-#这个拆分主要是为了超参搜索呢
 X_split_train, X_split_test, Y_split_train, Y_split_test = train_test_split(X_train_scaled, Y_train, test_size=0.14)
 
 start_time = datetime.datetime.now()
@@ -1473,12 +1505,16 @@ files = open("house_price_intermediate_parameters_2019-3-10174439.pickle", "rb")
 trials, space_nodes, best_nodes = pickle.load(files)
 files.close()
 
-#本来下面的做法应该是更好的做法但是由于计算量过大了，只能够用现在的方式计算咯
+best_nodes = parse_nodes(trials, space_nodes)
+save_inter_params(trials, space_nodes, best_nodes, "house_price")
+
 nodes_list = [best_nodes, best_nodes]
-#stacked_train, stacked_test = stacked_features_validate1(nodes_list, X_train_scaled, Y_train, X_test_scaled, 2, 1)
 stacked_train, stacked_test = stacked_features_validate1(nodes_list, X_train_scaled, Y_train, X_test_scaled, 2, 2)
 save_stacked_dataset(stacked_train, stacked_test, "house_price")
-lr_stacking_predict(nodes_list, data_test, stacked_train, Y_train, stacked_test, 2000)
+#lr_stacking_predict(nodes_list, data_test, stacked_train, Y_train, stacked_test, 2000)
+#这个svm的计算也太鸡儿慢了吧，而且Y_train必须要经过上述的处理才能够进行拟合咯
+Y_train = Y_train.values.flatten()
+svm_stacking_predict(nodes_list, data_test, stacked_train, Y_train, stacked_test, 2)
 
 end_time = datetime.datetime.now()
 print("time cost", (end_time - start_time))
