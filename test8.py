@@ -1,10 +1,10 @@
 #coding=utf-8
-#这个版本修正了scoring的部分，我是说别人提交的怎么都是0.1的误差，而我的提交都是30000左右的误差
-#在修正scoring的基础上，增加了超参搜索的次数，以获得更加优异的结果咯。
-#然后在这个版本需要定义一个RMSELoss，具体的写法可以参考这下面的代码 
-#RMSE得到的结果和RMSELoss应该是正相关的，但是我很想知道实际的效果，所以必须实现这个函数
-#这个版本我本来还想找一些回归问题的经典模型，但是图像相关的问题是存在经典模型的，但是回归问题似乎不存在耶
-#https://discuss.pytorch.org/t/custom-loss-functions/29387
+#这个版本主要就是进行了几个对比实验熬，对比的部分就是四组对比实验吧，分别对比的是正态分布前后的lasso与线性回归之前的区别咯
+#具体可以查阅下列链接的 https://zhuanlan.zhihu.com/p/38539982 或者 https://www.jianshu.com/p/defcbbfdb324 或者 https://www.lfyun.com/forum/3894/
+#我翻阅了很久最终这个链接好像更有用一些 https://blog.csdn.net/danspace1/article/details/80361448
+#我还在困惑以为改变了分布带来的误差咋整，其实只是取对数而已，预测的时候再幂乘回去，其实并没有带来误差，但是分布确实改变了。
+#我觉得比较困惑的地方就是非正态分布的数据（也就是最终要预测的房价）经过np.log也就是取对数之后似乎就变得符合正态分布了呢？
+#上面这个困惑的原因只有一个就是：该数据符合对数正态分布咯。至于这个房价为什么符合对数正态分布。。可能是常识吧，就像正态分布普遍存在于生活当中一样。。
 
 #这个版本的目的在于从以下四方面提升性能：从数据上提升性能、从算法上提升性能、从算法调优上提升性能、从模型融合上提升性能（性能提升的力度按上表的顺序从上到下依次递减。）
 #具体内容可参加https://www.baidu.com/link?url=zdq_sTzndnIZrJL71ZFaLlHnfSblGnNXPzeilgVTaKG2RJEHTWHZHTzVkkipM0El&wd=&eqid=aa03b37b0004b870000000025c2f02e6
@@ -12,14 +12,14 @@
 #原来神经网络模型的训练一直就比较慢，以至于有的时候不一定要采用交叉验证的方式来训练，可能直接用部分未训练数据作为验证集。。
 #然后对于模型过拟合或者欠拟合的判断贯穿整个机器学习的过程当中，原来stacking其实是最后一种用于提升模型泛化性能的方式咯。我的面试可以围绕这些开始吧。
 #上一个版本的结果不是很理想耶，所以这次真的是最后一次做这个实验了，我理解不应该删除“异常点”，此外随机重采样应该出现了问题了吧，come on, let's do it.
-#这个版本和下一个版本综合一起研究了很多的关于如何使用gpu提升计算效率的问题，只有在网络很大且batch-size很大的时候gpu计算速度才能够超过cpu，不论使用tensorflow还是pytorch。
+#这个版本和下一个版本综合一起研究了很多的关于如何使用gpu提升计算效率的问题，只有在网络很大且batch-size很大的时候gpu计算速度才能够超过cuda，不论使用tensorflow还是pytorch。
 #然后我想到了一个比较奸诈的方式实现计算过程的提速，那就是设置更大的batch-size，毕竟这个参数对于网络的影响还是比较小的但是对于计算时间影响较大的。
 
 #修改内容集被整理如下：
-#（0）到这个时候我才发现GPU训练神经网络的速度比cpu训练速度快很多耶。不对呀，好像也没有快很多吧
-#现在看来可能是和昨天cpu在运行别的程序有关吧导致计算比较慢，GPU似乎并没有比cpu带来十倍的优势吧？
+#（0）到这个时候我才发现GPU训练神经网络的速度比cuda训练速度快很多耶。不对呀，好像也没有快很多吧
+#现在看来可能是和昨天cuda在运行别的程序有关吧导致计算比较慢，GPU似乎并没有比cuda带来十倍的优势吧？
 #所以我觉得可能是我买的台式机被人给坑了吧，不过好在还有GPU可用。就是每次运行之前需要设置device和path咯。
-#应该是我的gpu性能太差的缘故，同样价位的gpu性能是同样价位cpu性能的30倍左右吧，所以我现在新买了二手gpu。
+#应该是我的gpu性能太差的缘故，同样价位的gpu性能是同样价位cuda性能的30倍左右吧，所以我现在新买了二手gpu。
 #（1）将保存文件的路径修改了。
 #（2）特征处理的流程需要修改。尤其是可能增加清除离群点的过程。
 #（3）record_best_model_rmse的方式可能需要修改，或许我们需要换种方式获取最佳模型咯，不对好像暂时还不能修改这个东西。
@@ -87,6 +87,7 @@ from sklearn.ensemble.weight_boosting import AdaBoostClassifier
 from sklearn.neural_network.multilayer_perceptron import MLPClassifier
 
 import seaborn as sns
+from scipy.stats import norm
 import matplotlib.pyplot as plt
 
 #加载文件
@@ -1396,7 +1397,7 @@ space = {"title":hp.choice("title", ["stacked_house_prices"]),
          #我按照赋值的方式对于偏置的范围进行计算，偏置几乎不会大于[-0.1, 0.1]
          #我测算了一下，按照普通的计算方式，下面的取值范围应该是比较合适的吧
          "bias":hp.choice("bias", [-0.03, -0.02, -0.01, 0, 0.01, 0.02, 0.03]),
-         "device":hp.choice("device", ["cpu"]),
+         "device":hp.choice("device", ["cuda"]),
          "optimizer":hp.choice("optimizer", [torch.optim.Adam])
          }
 
@@ -1439,7 +1440,7 @@ space_nodes = {"title":["stacked_house_prices"],
                "weight_mode":[1, 2, 3, 4, 5, 6, 7,
                               8, 9, 10, 11, 12, 13],
                "bias":[-0.03, -0.02, -0.01, 0, 0.01, 0.02, 0.03],
-               "device":["cpu"],
+               "device":["cuda"],
                "optimizer":[torch.optim.Adam]
                }
 
@@ -1463,10 +1464,11 @@ best_nodes = {"title":"stacked_house_prices",
               "percentage":0.2,
               "weight_mode":1,
               "bias":0.0,
-              "device":"cpu",
+              "device":"cuda",
               "optimizer":torch.optim.Adam
               }
 
+"""
 #这个主要是RMSELoss的问题，使用RMSELoss必须要采用这个熬
 Y_train_temp = Y_train.values.reshape(-1,1)
 Y_train = pd.DataFrame(data=Y_train_temp.astype(np.float32), columns=['SalePrice'])
@@ -1491,56 +1493,90 @@ lasso_stacking_rscv_predict(nodes_list, data_test, stacked_train, Y_train, stack
 
 end_time = datetime.datetime.now()
 print("time cost", (end_time - start_time))
-
 """
-#这个主要是RMSELoss的问题，使用RMSELoss必须要采用这个熬
-Y_train_temp = Y_train.values.reshape(-1,1)
-Y_train = pd.DataFrame(data=Y_train_temp.astype(np.float32), columns=['SalePrice'])
-X_split_train, X_split_test, Y_split_train, Y_split_test = train_test_split(X_train_scaled, Y_train, test_size=0.14)
+
+#现在要做的事情就是做四组对比实验吧，分别对比的是正态分布前后的lasso与线性回归之前的区别咯
+#先查一下如何对于数据的分布进行转换，然后是想办法对数据进行索引抽取进行训练和计算呢
+#但是这个实验这样设计是不是存在问题，毕竟超参选择的结果是根据分布没有被改变的数据搜索的呢，但是还是试一哈吧
+
+#现在搞清楚log log1p 以及norm这几样东西的含义吧，然后似乎就可以进行计算和比较咯，然后就差不多可以开始准备read_me咯
+#https://stackoverflow.com/questions/49538185/what-is-the-purpose-of-numpy-log1p 说的log1p(x)=log(x+1),以及为什么这样设计
+#这个log就不用说了吧之前设计RMSE的时候已经使用过了，norm其实就是用来进行创建或者拟合正态分布的熬，搞清楚这几件事情，感觉就可以做一些对比实验咯
+#data_train['SalePrice']=np.log1p(data_train['SalePrice'])
+#(mu,sigma)=norm.fit(data_train['SalePrice'])
+#print(mu)
+#print(sigma)
+
+rmse_list = []
+rmsle_list = []
 
 start_time = datetime.datetime.now()
-trials = Trials()
-algo = partial(tpe.suggest, n_startup_jobs=10)
-best_params = fmin(nn_f, space, algo=algo, max_evals=2, trials=trials)
+for i in range(0, 1):
+    Y_train_temp = Y_train.values.reshape(-1,1)
+    Y_train = pd.DataFrame(data=Y_train_temp.astype(np.float32), columns=['SalePrice'])
+    X_split_train, X_split_test, Y_split_train, Y_split_test = train_test_split(X_train_scaled, Y_train, test_size=0.14)
 
-best_nodes = parse_nodes(trials, space_nodes)
-save_inter_params(trials, space_nodes, best_nodes, "house_price")
+    files = open("house_price_intermediate_parameters_2019-3-29210424.pickle", "rb")
+    trials, space_nodes, best_nodes = pickle.load(files)
+    files.close()
 
-nodes_list = [best_nodes, best_nodes]
-stacked_train, stacked_test = stacked_features_validate1(nodes_list, X_train_scaled, Y_train, X_test_scaled, 2, 2)
-#stacked_train, stacked_test = stacked_features_validate2(nodes_list, X_train_scaled, Y_train, X_test_scaled, 2, 2)
-save_stacked_dataset(stacked_train, stacked_test, "house_price")
-#lr_stacking_predict(nodes_list, data_test, stacked_train, Y_train, stacked_test, 2000)
-Y_train_temp = Y_train.values.flatten()
-Y_train = pd.DataFrame(data=Y_train_temp.astype(np.float32), columns=['SalePrice'])
-svm_stacking_predict(nodes_list, data_test, stacked_train, Y_train, stacked_test, 2000)
+    #没有经过数据转换的两组实验数据咯
+    #其实这两组数据是没有必要比较的毕竟下面是超参搜索上面没有超参搜索的
+    nodes_list = [best_nodes, best_nodes]
+    stacked_train, stacked_test = stacked_features_validate1(nodes_list, X_split_train, Y_split_train, X_split_test, 2, 2)
+    #前两组数据的Y_split_test似乎是需要做一些设置的
+    Y_split_test = Y_split_test.values.flatten()
+    Y_split_test = pd.DataFrame(data=Y_split_test.astype(np.float32), columns=['SalePrice'])
+    #线性回归函数用于对stacked之后的数据进行预测
+    rsg = LinearRegression()
+    rsg.fit(stacked_train, Y_split_train)
+    best_rmse = cal_nnrsg_rmse(rsg, stacked_test.values, Y_split_test.values)
+    rmse_list.append(best_rmse)
+    best_rmsle = cal_nnrsg_rmsle(rsg, stacked_test.values, Y_split_test.values)
+    rmsle_list.append(best_rmsle)
+    #lasso函数用于对stacked之后的数据进行预测
+    rsg = Lasso(max_iter=8000, tol=0.01)
+    param_dist = {"alpha": np.linspace(-3, 5, 100),
+                  "fit_intercept": [True, False],
+                  "normalize": [True, False],
+                  "positive": [True, False],
+                  }
+    random_search = RandomizedSearchCV(rsg, param_distributions=param_dist, n_iter=600)
+    random_search.fit(stacked_train, Y_split_train)
+    best_rmse = cal_nnrsg_rmse(random_search.best_estimator_, stacked_test.values, Y_split_test.values)
+    rmse_list.append(best_rmse)
+    best_rmsle = cal_nnrsg_rmsle(random_search.best_estimator_, stacked_test.values, Y_split_test.values)
+    rmsle_list.append(best_rmsle)
+    
+    #后面两组的数据进行比较
+    Y_split_test = Y_split_test.values.reshape(-1,1)
+    Y_split_test = pd.DataFrame(data=Y_split_test.astype(np.float32), columns=['SalePrice'])
+    #然后对于数据进行转换咯，看看转换之后的数据能够正常进行
+    Y_split_train = np.log1p(Y_split_train)
+    Y_split_test = np.log1p(Y_split_test)
+    #线性回归函数用于对stacked之后的数据进行预测
+    rsg = LinearRegression()
+    rsg.fit(stacked_train, Y_split_train)
+    best_rmse = cal_nnrsg_rmse(rsg, stacked_test.values, np.expm1(Y_split_test.values))
+    rmse_list.append(best_rmse)
+    best_rmsle = cal_nnrsg_rmsle(rsg, stacked_test.values, np.expm1(Y_split_test.values))
+    rmsle_list.append(best_rmsle)
+    #lasso函数用于对stacked之后的数据进行预测
+    rsg = Lasso(max_iter=8000, tol=0.01)
+    param_dist = {"alpha": np.linspace(-3, 5, 100),
+                  "fit_intercept": [True, False],
+                  "normalize": [True, False],
+                  "positive": [True, False],
+                  }
+    random_search = RandomizedSearchCV(rsg, param_distributions=param_dist, n_iter=600)
+    random_search.fit(stacked_train, Y_split_train)
+    best_rmse = cal_nnrsg_rmse(random_search.best_estimator_, stacked_test.values, np.expm1(Y_split_test.values))
+    rmse_list.append(best_rmse)
+    best_rmsle = cal_nnrsg_rmsle(random_search.best_estimator_, stacked_test.values, np.expm1(Y_split_test.values))
+    rmsle_list.append(best_rmsle)
 
 end_time = datetime.datetime.now()
 print("time cost", (end_time - start_time))
-"""
-
-"""
-#这个主要是RMSELoss的问题，使用RMSELoss必须要采用这个熬
-Y_train_temp = Y_train.values.reshape(-1,1)
-Y_train = pd.DataFrame(data=Y_train_temp.astype(np.float32), columns=['SalePrice'])
-X_split_train, X_split_test, Y_split_train, Y_split_test = train_test_split(X_train_scaled, Y_train, test_size=0.14)
-
-start_time = datetime.datetime.now()
-files = open("house_price_intermediate_parameters_2019-3-10174439.pickle", "rb")
-trials, space_nodes, best_nodes = pickle.load(files)
-files.close()
-
-best_nodes = parse_nodes(trials, space_nodes)
-save_inter_params(trials, space_nodes, best_nodes, "house_price")
-
-nodes_list = [best_nodes, best_nodes]
-stacked_train, stacked_test = stacked_features_validate1(nodes_list, X_train_scaled, Y_train, X_test_scaled, 2, 2)
-save_stacked_dataset(stacked_train, stacked_test, "house_price")
-#lr_stacking_predict(nodes_list, data_test, stacked_train, Y_train, stacked_test, 2000)
-#这个svm的计算也太鸡儿慢了吧，而且Y_train必须要经过上述的处理才能够进行拟合咯
-Y_train = Y_train.values.flatten()
-svm_stacking_predict(nodes_list, data_test, stacked_train, Y_train, stacked_test, 2)
-
-end_time = datetime.datetime.now()
-print("time cost", (end_time - start_time))
-"""
+for i in range(0, len(rmse_list)):
+    print(rmse_list[i])
+    print(rmsle_list[i])
