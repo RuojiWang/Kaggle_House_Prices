@@ -1309,7 +1309,7 @@ def lr_stacking_predict(nodes_list, data_test, stacked_train, Y_train, stacked_t
 #stacked_test is the test data after stacking,
 #max_evals is the iterations number of randomized search
 def lasso_stacking_rscv_predict(nodes_list, data_test, stacked_train, Y_train, stacked_test, max_evals=8000):
-    
+
     #Lasso回归的损失函数优化方法常用的有两种，坐标轴下降法和最小角回归法。
     #LassoLars类采用的是最小角回归法，前面讲到的Lasso类采用的是坐标轴下降法。
     #Lasso加上RandomizedSearchCV，基本上就大于LassoCV的，毕竟后者只是CV别个参数呢
@@ -1320,9 +1320,17 @@ def lasso_stacking_rscv_predict(nodes_list, data_test, stacked_train, Y_train, s
                   "normalize": [True, False],
                   "positive": [True, False],
                   }
-    random_search = RandomizedSearchCV(rsg, param_distributions=param_dist, n_iter=max_evals)
+    random_search = RandomizedSearchCV(rsg, param_distributions=param_dist, n_iter=max_evals)#,scoring ="mother_fucker" #,scoring ="mean_squared_error" #, scoring="neg_mean_squared_error")
     random_search.fit(stacked_train, Y_train)
     best_acc = random_search.best_estimator_.score(stacked_train, Y_train)
+    #RandomizedSearchCV的fit和score返回的大概就是下面的结果
+    #RandomizedSearchCV implements a "fit" and a "score" method.
+    #It also implements "predict", "predict_proba", "decision_function",
+    #"transform" and "inverse_transform" if they are implemented in the
+    #estimator used. 
+    #但是lasso本身是没有scoring的因为默认是返回The coefficient R^2的结果
+    #RandomizedSearchCV的scoring可以设置为neg_mean_squared_error之类的东西
+    #但是我个人觉得可能采用默认的值会取得更好的结果吧。
     lr_pred = random_search.best_estimator_.predict(stacked_test)
 
     save_best_model(random_search.best_estimator_, nodes_list[0]["title"]+"_"+str(len(nodes_list)))
@@ -1492,7 +1500,7 @@ start_time = datetime.datetime.now()
 trials = Trials()
 algo = partial(tpe.suggest, n_startup_jobs=10)
 #max_evals determine hyperparameters search times, bigger max_evals may lead to better results.
-best_params = fmin(nn_f, space, algo=algo, max_evals=120, trials=trials)
+best_params = fmin(nn_f, space, algo=algo, max_evals=2, trials=trials)
 
 #save the result of the hyperopt(bayesian optimization) search.
 best_nodes = parse_nodes(trials, space_nodes)
