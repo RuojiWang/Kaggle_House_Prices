@@ -262,7 +262,7 @@ def load_best_model(title_and_nodes):
 #clf is the newly trained model,
 #acc is the accuracy of the clf,
 #best_model is the best model so far,
-#best_acc is the accuracy of the best_model
+#best_score is the accuracy of the best_model
 def record_best_model_rmse(rsg, rsme, best_model, best_rmse):
     
     flag = False
@@ -1322,7 +1322,7 @@ def lasso_stacking_rscv_predict(nodes_list, data_test, stacked_train, Y_train, s
                   }
     random_search = RandomizedSearchCV(rsg, param_distributions=param_dist, n_iter=max_evals)#,scoring ="mother_fucker" #,scoring ="mean_squared_error" #, scoring="neg_mean_squared_error")
     random_search.fit(stacked_train, Y_train)
-    best_acc = random_search.best_estimator_.score(stacked_train, Y_train)
+    best_score = random_search.best_estimator_.score(stacked_train, Y_train)
     #RandomizedSearchCV的fit和score返回的大概就是下面的结果
     #RandomizedSearchCV implements a "fit" and a "score" method.
     #It also implements "predict", "predict_proba", "decision_function",
@@ -1341,8 +1341,14 @@ def lasso_stacking_rscv_predict(nodes_list, data_test, stacked_train, Y_train, s
             
     output.to_csv(nodes_list[0]["path"], index=False)
     print("prediction file has been written.")
+    
+    #这边不修改一下类型，绝壁是会报错的咯，反馈的错误太奇怪，导致调试花费了一些时间吧
+    rmse = cal_nnrsg_rmse(random_search.best_estimator_, stacked_train.values, Y_train.values)
+    print(rmse)
+    rmsle = cal_nnrsg_rmsle(random_search.best_estimator_, stacked_train.values, Y_train.values)
+    print(rmsle)
      
-    print("the best accuracy rate of the model on the whole train dataset is:", best_acc)
+    print("the best coefficient R^2 of the model on the whole train dataset is:", best_score)
     print()
     return random_search.best_estimator_, Y_pred
 

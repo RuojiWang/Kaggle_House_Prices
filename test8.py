@@ -1511,7 +1511,7 @@ rmse_list = []
 rmsle_list = []
 
 start_time = datetime.datetime.now()
-for i in range(0, 1):
+for i in range(0, 3):
     Y_train_temp = Y_train.values.reshape(-1,1)
     Y_train = pd.DataFrame(data=Y_train_temp.astype(np.float32), columns=['SalePrice'])
     X_split_train, X_split_test, Y_split_train, Y_split_test = train_test_split(X_train_scaled, Y_train, test_size=0.14)
@@ -1520,10 +1520,11 @@ for i in range(0, 1):
     trials, space_nodes, best_nodes = pickle.load(files)
     files.close()
 
+    #2,20,25的参数的对比结果咯
     #没有经过数据转换的两组实验数据咯
     #其实这两组数据是没有必要比较的毕竟下面是超参搜索上面没有超参搜索的
     nodes_list = [best_nodes, best_nodes]
-    stacked_train, stacked_test = stacked_features_validate1(nodes_list, X_split_train, Y_split_train, X_split_test, 2, 2)
+    stacked_train, stacked_test = stacked_features_validate1(nodes_list, X_split_train, Y_split_train, X_split_test, 20, 25)
     #前两组数据的Y_split_test似乎是需要做一些设置的
     Y_split_test = Y_split_test.values.flatten()
     Y_split_test = pd.DataFrame(data=Y_split_test.astype(np.float32), columns=['SalePrice'])
@@ -1547,7 +1548,6 @@ for i in range(0, 1):
     rmse_list.append(best_rmse)
     best_rmsle = cal_nnrsg_rmsle(random_search.best_estimator_, stacked_test.values, Y_split_test.values)
     rmsle_list.append(best_rmsle)
-    
     #后面两组的数据进行比较
     Y_split_test = Y_split_test.values.reshape(-1,1)
     Y_split_test = pd.DataFrame(data=Y_split_test.astype(np.float32), columns=['SalePrice'])
@@ -1575,6 +1575,217 @@ for i in range(0, 1):
     best_rmsle = cal_nnrsg_rmsle(random_search.best_estimator_, stacked_test.values, np.expm1(Y_split_test.values))
     rmsle_list.append(best_rmsle)
 
+    #3,20,25的参数的对比结果咯
+    nodes_list = [best_nodes, best_nodes, best_nodes]
+    stacked_train, stacked_test = stacked_features_validate1(nodes_list, X_split_train, Y_split_train, X_split_test, 20, 25)
+    #前两组数据的Y_split_test似乎是需要做一些设置的
+    Y_split_test = Y_split_test.values.flatten()
+    Y_split_test = pd.DataFrame(data=Y_split_test.astype(np.float32), columns=['SalePrice'])
+    #线性回归函数用于对stacked之后的数据进行预测
+    rsg = LinearRegression()
+    rsg.fit(stacked_train, Y_split_train)
+    best_rmse = cal_nnrsg_rmse(rsg, stacked_test.values, Y_split_test.values)
+    rmse_list.append(best_rmse)
+    best_rmsle = cal_nnrsg_rmsle(rsg, stacked_test.values, Y_split_test.values)
+    rmsle_list.append(best_rmsle)
+    #lasso函数用于对stacked之后的数据进行预测
+    rsg = Lasso(max_iter=8000, tol=0.01)
+    param_dist = {"alpha": np.linspace(-3, 5, 100),
+                  "fit_intercept": [True, False],
+                  "normalize": [True, False],
+                  "positive": [True, False],
+                  }
+    random_search = RandomizedSearchCV(rsg, param_distributions=param_dist, n_iter=600)
+    random_search.fit(stacked_train, Y_split_train)
+    best_rmse = cal_nnrsg_rmse(random_search.best_estimator_, stacked_test.values, Y_split_test.values)
+    rmse_list.append(best_rmse)
+    best_rmsle = cal_nnrsg_rmsle(random_search.best_estimator_, stacked_test.values, Y_split_test.values)
+    rmsle_list.append(best_rmsle)
+    #后面两组的数据进行比较
+    Y_split_test = Y_split_test.values.reshape(-1,1)
+    Y_split_test = pd.DataFrame(data=Y_split_test.astype(np.float32), columns=['SalePrice'])
+    #然后对于数据进行转换咯，看看转换之后的数据能够正常进行
+    Y_split_train = np.log1p(Y_split_train)
+    Y_split_test = np.log1p(Y_split_test)
+    #线性回归函数用于对stacked之后的数据进行预测
+    rsg = LinearRegression()
+    rsg.fit(stacked_train, Y_split_train)
+    best_rmse = cal_nnrsg_rmse(rsg, stacked_test.values, np.expm1(Y_split_test.values))
+    rmse_list.append(best_rmse)
+    best_rmsle = cal_nnrsg_rmsle(rsg, stacked_test.values, np.expm1(Y_split_test.values))
+    rmsle_list.append(best_rmsle)
+    #lasso函数用于对stacked之后的数据进行预测
+    rsg = Lasso(max_iter=8000, tol=0.01)
+    param_dist = {"alpha": np.linspace(-3, 5, 100),
+                  "fit_intercept": [True, False],
+                  "normalize": [True, False],
+                  "positive": [True, False],
+                  }
+    random_search = RandomizedSearchCV(rsg, param_distributions=param_dist, n_iter=600)
+    random_search.fit(stacked_train, Y_split_train)
+    best_rmse = cal_nnrsg_rmse(random_search.best_estimator_, stacked_test.values, np.expm1(Y_split_test.values))
+    rmse_list.append(best_rmse)
+    best_rmsle = cal_nnrsg_rmsle(random_search.best_estimator_, stacked_test.values, np.expm1(Y_split_test.values))
+    rmsle_list.append(best_rmsle)
+    
+    #3,25,25的参数的对比结果咯
+    nodes_list = [best_nodes, best_nodes, best_nodes]
+    stacked_train, stacked_test = stacked_features_validate1(nodes_list, X_split_train, Y_split_train, X_split_test, 25, 25)
+    #前两组数据的Y_split_test似乎是需要做一些设置的
+    Y_split_test = Y_split_test.values.flatten()
+    Y_split_test = pd.DataFrame(data=Y_split_test.astype(np.float32), columns=['SalePrice'])
+    #线性回归函数用于对stacked之后的数据进行预测
+    rsg = LinearRegression()
+    rsg.fit(stacked_train, Y_split_train)
+    best_rmse = cal_nnrsg_rmse(rsg, stacked_test.values, Y_split_test.values)
+    rmse_list.append(best_rmse)
+    best_rmsle = cal_nnrsg_rmsle(rsg, stacked_test.values, Y_split_test.values)
+    rmsle_list.append(best_rmsle)
+    #lasso函数用于对stacked之后的数据进行预测
+    rsg = Lasso(max_iter=8000, tol=0.01)
+    param_dist = {"alpha": np.linspace(-3, 5, 100),
+                  "fit_intercept": [True, False],
+                  "normalize": [True, False],
+                  "positive": [True, False],
+                  }
+    random_search = RandomizedSearchCV(rsg, param_distributions=param_dist, n_iter=600)
+    random_search.fit(stacked_train, Y_split_train)
+    best_rmse = cal_nnrsg_rmse(random_search.best_estimator_, stacked_test.values, Y_split_test.values)
+    rmse_list.append(best_rmse)
+    best_rmsle = cal_nnrsg_rmsle(random_search.best_estimator_, stacked_test.values, Y_split_test.values)
+    rmsle_list.append(best_rmsle)
+    #后面两组的数据进行比较
+    Y_split_test = Y_split_test.values.reshape(-1,1)
+    Y_split_test = pd.DataFrame(data=Y_split_test.astype(np.float32), columns=['SalePrice'])
+    #然后对于数据进行转换咯，看看转换之后的数据能够正常进行
+    Y_split_train = np.log1p(Y_split_train)
+    Y_split_test = np.log1p(Y_split_test)
+    #线性回归函数用于对stacked之后的数据进行预测
+    rsg = LinearRegression()
+    rsg.fit(stacked_train, Y_split_train)
+    best_rmse = cal_nnrsg_rmse(rsg, stacked_test.values, np.expm1(Y_split_test.values))
+    rmse_list.append(best_rmse)
+    best_rmsle = cal_nnrsg_rmsle(rsg, stacked_test.values, np.expm1(Y_split_test.values))
+    rmsle_list.append(best_rmsle)
+    #lasso函数用于对stacked之后的数据进行预测
+    rsg = Lasso(max_iter=8000, tol=0.01)
+    param_dist = {"alpha": np.linspace(-3, 5, 100),
+                  "fit_intercept": [True, False],
+                  "normalize": [True, False],
+                  "positive": [True, False],
+                  }
+    random_search = RandomizedSearchCV(rsg, param_distributions=param_dist, n_iter=600)
+    random_search.fit(stacked_train, Y_split_train)
+    best_rmse = cal_nnrsg_rmse(random_search.best_estimator_, stacked_test.values, np.expm1(Y_split_test.values))
+    rmse_list.append(best_rmse)
+    best_rmsle = cal_nnrsg_rmsle(random_search.best_estimator_, stacked_test.values, np.expm1(Y_split_test.values))
+    rmsle_list.append(best_rmsle)
+    
+    #5,25,25的参数的对比结果咯
+    nodes_list = [best_nodes, best_nodes, best_nodes, best_nodes, best_nodes]
+    stacked_train, stacked_test = stacked_features_validate1(nodes_list, X_split_train, Y_split_train, X_split_test, 25, 25)
+    #前两组数据的Y_split_test似乎是需要做一些设置的
+    Y_split_test = Y_split_test.values.flatten()
+    Y_split_test = pd.DataFrame(data=Y_split_test.astype(np.float32), columns=['SalePrice'])
+    #线性回归函数用于对stacked之后的数据进行预测
+    rsg = LinearRegression()
+    rsg.fit(stacked_train, Y_split_train)
+    best_rmse = cal_nnrsg_rmse(rsg, stacked_test.values, Y_split_test.values)
+    rmse_list.append(best_rmse)
+    best_rmsle = cal_nnrsg_rmsle(rsg, stacked_test.values, Y_split_test.values)
+    rmsle_list.append(best_rmsle)
+    #lasso函数用于对stacked之后的数据进行预测
+    rsg = Lasso(max_iter=8000, tol=0.01)
+    param_dist = {"alpha": np.linspace(-3, 5, 100),
+                  "fit_intercept": [True, False],
+                  "normalize": [True, False],
+                  "positive": [True, False],
+                  }
+    random_search = RandomizedSearchCV(rsg, param_distributions=param_dist, n_iter=600)
+    random_search.fit(stacked_train, Y_split_train)
+    best_rmse = cal_nnrsg_rmse(random_search.best_estimator_, stacked_test.values, Y_split_test.values)
+    rmse_list.append(best_rmse)
+    best_rmsle = cal_nnrsg_rmsle(random_search.best_estimator_, stacked_test.values, Y_split_test.values)
+    rmsle_list.append(best_rmsle)
+    #后面两组的数据进行比较
+    Y_split_test = Y_split_test.values.reshape(-1,1)
+    Y_split_test = pd.DataFrame(data=Y_split_test.astype(np.float32), columns=['SalePrice'])
+    #然后对于数据进行转换咯，看看转换之后的数据能够正常进行
+    Y_split_train = np.log1p(Y_split_train)
+    Y_split_test = np.log1p(Y_split_test)
+    #线性回归函数用于对stacked之后的数据进行预测
+    rsg = LinearRegression()
+    rsg.fit(stacked_train, Y_split_train)
+    best_rmse = cal_nnrsg_rmse(rsg, stacked_test.values, np.expm1(Y_split_test.values))
+    rmse_list.append(best_rmse)
+    best_rmsle = cal_nnrsg_rmsle(rsg, stacked_test.values, np.expm1(Y_split_test.values))
+    rmsle_list.append(best_rmsle)
+    #lasso函数用于对stacked之后的数据进行预测
+    rsg = Lasso(max_iter=8000, tol=0.01)
+    param_dist = {"alpha": np.linspace(-3, 5, 100),
+                  "fit_intercept": [True, False],
+                  "normalize": [True, False],
+                  "positive": [True, False],
+                  }
+    random_search = RandomizedSearchCV(rsg, param_distributions=param_dist, n_iter=600)
+    random_search.fit(stacked_train, Y_split_train)
+    best_rmse = cal_nnrsg_rmse(random_search.best_estimator_, stacked_test.values, np.expm1(Y_split_test.values))
+    rmse_list.append(best_rmse)
+    best_rmsle = cal_nnrsg_rmsle(random_search.best_estimator_, stacked_test.values, np.expm1(Y_split_test.values))
+    rmsle_list.append(best_rmsle)
+
+    #5,25,40的参数的对比结果咯
+    nodes_list = [best_nodes, best_nodes, best_nodes, best_nodes, best_nodes]
+    stacked_train, stacked_test = stacked_features_validate1(nodes_list, X_split_train, Y_split_train, X_split_test, 25, 40)
+    #前两组数据的Y_split_test似乎是需要做一些设置的
+    Y_split_test = Y_split_test.values.flatten()
+    Y_split_test = pd.DataFrame(data=Y_split_test.astype(np.float32), columns=['SalePrice'])
+    #线性回归函数用于对stacked之后的数据进行预测
+    rsg = LinearRegression()
+    rsg.fit(stacked_train, Y_split_train)
+    best_rmse = cal_nnrsg_rmse(rsg, stacked_test.values, Y_split_test.values)
+    rmse_list.append(best_rmse)
+    best_rmsle = cal_nnrsg_rmsle(rsg, stacked_test.values, Y_split_test.values)
+    rmsle_list.append(best_rmsle)
+    #lasso函数用于对stacked之后的数据进行预测
+    rsg = Lasso(max_iter=8000, tol=0.01)
+    param_dist = {"alpha": np.linspace(-3, 5, 100),
+                  "fit_intercept": [True, False],
+                  "normalize": [True, False],
+                  "positive": [True, False],
+                  }
+    random_search = RandomizedSearchCV(rsg, param_distributions=param_dist, n_iter=600)
+    random_search.fit(stacked_train, Y_split_train)
+    best_rmse = cal_nnrsg_rmse(random_search.best_estimator_, stacked_test.values, Y_split_test.values)
+    rmse_list.append(best_rmse)
+    best_rmsle = cal_nnrsg_rmsle(random_search.best_estimator_, stacked_test.values, Y_split_test.values)
+    rmsle_list.append(best_rmsle)
+    #后面两组的数据进行比较
+    Y_split_test = Y_split_test.values.reshape(-1,1)
+    Y_split_test = pd.DataFrame(data=Y_split_test.astype(np.float32), columns=['SalePrice'])
+    #然后对于数据进行转换咯，看看转换之后的数据能够正常进行
+    Y_split_train = np.log1p(Y_split_train)
+    Y_split_test = np.log1p(Y_split_test)
+    #线性回归函数用于对stacked之后的数据进行预测
+    rsg = LinearRegression()
+    rsg.fit(stacked_train, Y_split_train)
+    best_rmse = cal_nnrsg_rmse(rsg, stacked_test.values, np.expm1(Y_split_test.values))
+    rmse_list.append(best_rmse)
+    best_rmsle = cal_nnrsg_rmsle(rsg, stacked_test.values, np.expm1(Y_split_test.values))
+    rmsle_list.append(best_rmsle)
+    #lasso函数用于对stacked之后的数据进行预测
+    rsg = Lasso(max_iter=8000, tol=0.01)
+    param_dist = {"alpha": np.linspace(-3, 5, 100),
+                  "fit_intercept": [True, False],
+                  "normalize": [True, False],
+                  "positive": [True, False],
+                  }
+    random_search = RandomizedSearchCV(rsg, param_distributions=param_dist, n_iter=600)
+    random_search.fit(stacked_train, Y_split_train)
+    best_rmse = cal_nnrsg_rmse(random_search.best_estimator_, stacked_test.values, np.expm1(Y_split_test.values))
+    rmse_list.append(best_rmse)
+    best_rmsle = cal_nnrsg_rmsle(random_search.best_estimator_, stacked_test.values, np.expm1(Y_split_test.values))
+    rmsle_list.append(best_rmsle)
 end_time = datetime.datetime.now()
 print("time cost", (end_time - start_time))
 for i in range(0, len(rmse_list)):
