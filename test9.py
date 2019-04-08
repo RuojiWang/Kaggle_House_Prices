@@ -1,5 +1,10 @@
 #coding=utf-8
-#这个版本应该就是最终的提交版本了吧，大概随便写一下吧
+#这个版本应该就是最终的提交版本了吧，大概随便写一下吧，然后我还找到了特殊的信息流吧，也就是比较有帮助的资源咯
+#今天看了一下机器学习面试的部分，感觉目前我还是有个好想法，想要将自己已经收集到的问题和实验串联起来咯。
+#https://github.com/scutan90/DeepLearning-500-questions 机器学习500问，比较全面的收集了各种常见的问题，已经fork。
+#https://github.com/terryum/awesome-deep-learning-papers 机器学习领域最受欢迎的相关论文
+#https://github.com/GokuMohandas/practicalAI/
+
 #这个版本的目的在于从以下四方面提升性能：从数据上提升性能、从算法上提升性能、从算法调优上提升性能、从模型融合上提升性能（性能提升的力度按上表的顺序从上到下依次递减。）
 #具体内容可参加https://www.baidu.com/link?url=zdq_sTzndnIZrJL71ZFaLlHnfSblGnNXPzeilgVTaKG2RJEHTWHZHTzVkkipM0El&wd=&eqid=aa03b37b0004b870000000025c2f02e6
 #更具体一点地说：可能以后就是增加正则化项吧，能够一定程度的减小网络的复杂度类似奥卡姆剃刀原则。自己随机生成大量的数据吧。将数据缩放到激活函数的阈值内
@@ -1462,7 +1467,10 @@ best_nodes = {"title":"stacked_house_prices",
               "optimizer":torch.optim.Adam
               }
 
-#这个主要是RMSELoss的问题，使用RMSELoss必须要采用这个熬
+#最后就是提交这四个方式的实验结果就差不多了吧
+"""
+#多节点的未进行取对数的情况熬
+#这个版本最终提交的结果是0.14吧，感觉不是特别的理想，毕竟只能够是top65%
 Y_train_temp = Y_train.values.reshape(-1,1)
 Y_train = pd.DataFrame(data=Y_train_temp.astype(np.float32), columns=['SalePrice'])
 X_split_train, X_split_test, Y_split_train, Y_split_test = train_test_split(X_train_scaled, Y_train, test_size=0.14)
@@ -1484,3 +1492,10 @@ lasso_stacking_rscv_predict(nodes_list, data_test, stacked_train, Y_train, stack
 
 end_time = datetime.datetime.now()
 print("time cost", (end_time - start_time))
+"""
+
+#单节点的部分非取对数的情况，感觉stacking还是必须的吧，肯定比单模型泛化能力强一些吧
+
+
+#单节点的取了对数的情况
+#多节点的取了对数的情况熬
