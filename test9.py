@@ -1308,9 +1308,17 @@ def lasso_stacking_rscv_predict(nodes_list, data_test, stacked_train, Y_train, s
                   "normalize": [True, False],
                   "positive": [True, False],
                   }
-    random_search = RandomizedSearchCV(rsg, param_distributions=param_dist, n_iter=max_evals)
+    random_search = RandomizedSearchCV(rsg, param_distributions=param_dist, n_iter=max_evals)#,scoring ="mother_fucker" #,scoring ="mean_squared_error" #, scoring="neg_mean_squared_error")
     random_search.fit(stacked_train, Y_train)
-    best_acc = random_search.best_estimator_.score(stacked_train, Y_train)
+    best_score = random_search.best_estimator_.score(stacked_train, Y_train)
+    #RandomizedSearchCV的fit和score返回的大概就是下面的结果
+    #RandomizedSearchCV implements a "fit" and a "score" method.
+    #It also implements "predict", "predict_proba", "decision_function",
+    #"transform" and "inverse_transform" if they are implemented in the
+    #estimator used. 
+    #但是lasso本身是没有scoring的因为默认是返回The coefficient R^2的结果
+    #RandomizedSearchCV的scoring可以设置为neg_mean_squared_error之类的东西
+    #但是我个人觉得可能采用默认的值会取得更好的结果吧。
     lr_pred = random_search.best_estimator_.predict(stacked_test)
 
     save_best_model(random_search.best_estimator_, nodes_list[0]["title"]+"_"+str(len(nodes_list)))
@@ -1321,12 +1329,61 @@ def lasso_stacking_rscv_predict(nodes_list, data_test, stacked_train, Y_train, s
             
     output.to_csv(nodes_list[0]["path"], index=False)
     print("prediction file has been written.")
+    
+    #这边不修改一下类型，绝壁是会报错的咯，反馈的错误太奇怪，导致调试花费了一些时间吧
+    rmse = cal_nnrsg_rmse(random_search.best_estimator_, stacked_train.values, Y_train.values)
+    print(rmse)
+    rmsle = cal_nnrsg_rmsle(random_search.best_estimator_, stacked_train.values, Y_train.values)
+    print(rmsle)
      
-    print("the best accuracy rate of the model on the whole train dataset is:", best_acc)
+    print("the best coefficient R^2 of the model on the whole train dataset is:", best_score)
     print()
     return random_search.best_estimator_, Y_pred
 
+def lasso_stacking_rscv_expm1_predict(nodes_list, data_test, stacked_train, Y_train, stacked_test, max_evals=50):
     
+    #Lasso回归的损失函数优化方法常用的有两种，坐标轴下降法和最小角回归法。
+    #LassoLars类采用的是最小角回归法，前面讲到的Lasso类采用的是坐标轴下降法。
+    #Lasso加上RandomizedSearchCV，基本上就大于LassoCV的，毕竟后者只是CV别个参数呢
+    rsg = Lasso(max_iter=8000, tol=0.01)
+    #这边的参数我觉得还是有必要进行这样的设置的，才能够比较好的表示
+    param_dist = {"alpha": np.linspace(-3, 5, 100),
+                  "fit_intercept": [True, False],
+                  "normalize": [True, False],
+                  "positive": [True, False],
+                  }
+    random_search = RandomizedSearchCV(rsg, param_distributions=param_dist, n_iter=max_evals)#,scoring ="mother_fucker" #,scoring ="mean_squared_error" #, scoring="neg_mean_squared_error")
+    random_search.fit(stacked_train, Y_train)
+    best_score = random_search.best_estimator_.score(stacked_train, Y_train)
+    #RandomizedSearchCV的fit和score返回的大概就是下面的结果
+    #RandomizedSearchCV implements a "fit" and a "score" method.
+    #It also implements "predict", "predict_proba", "decision_function",
+    #"transform" and "inverse_transform" if they are implemented in the
+    #estimator used. 
+    #但是lasso本身是没有scoring的因为默认是返回The coefficient R^2的结果
+    #RandomizedSearchCV的scoring可以设置为neg_mean_squared_error之类的东西
+    #但是我个人觉得可能采用默认的值会取得更好的结果吧。
+
+    save_best_model(random_search.best_estimator_, nodes_list[0]["title"]+"_"+str(len(nodes_list)))
+    Y_pred = random_search.best_estimator_.predict(stacked_test.values.astype(np.float32))
+    Y_pred = np.expm1(Y_pred)    
+    
+    data = {"Id":data_test["Id"], "SalePrice":Y_pred}
+    output = pd.DataFrame(data = data)
+            
+    output.to_csv(nodes_list[0]["path"], index=False)
+    print("prediction file has been written.")
+    
+    #这边不修改一下类型，绝壁是会报错的咯，反馈的错误太奇怪，导致调试花费了一些时间吧
+    rmse = cal_nnrsg_rmse(random_search.best_estimator_, stacked_train.values, np.expm1(Y_train.values))
+    print(rmse)
+    rmsle = cal_nnrsg_rmsle(random_search.best_estimator_, stacked_train.values, np.expm1(Y_train.values))
+    print(rmsle)
+     
+    print("the best coefficient R^2 of the model on the whole train dataset is:", best_score)
+    print()
+    return random_search.best_estimator_, Y_pred
+        
 #这个函数执行过程奇慢无比，两次迭代居然几分钟都还没计算完，我真的哔了狗了
 #我本来还说用这个函数来做个对比实验的，现在看起来做尼玛呢，完全没办法运行吧
 def svm_stacking_predict(nodes_list, data_test, stacked_train, Y_train, stacked_test, max_evals=50):
@@ -1494,8 +1551,84 @@ end_time = datetime.datetime.now()
 print("time cost", (end_time - start_time))
 """
 
+"""
 #单节点的部分非取对数的情况，感觉stacking还是必须的吧，肯定比单模型泛化能力强一些吧
+Y_train_temp = Y_train.values.reshape(-1,1)
+Y_train = pd.DataFrame(data=Y_train_temp.astype(np.float32), columns=['SalePrice'])
+X_split_train, X_split_test, Y_split_train, Y_split_test = train_test_split(X_train_scaled, Y_train, test_size=0.14)
 
+start_time = datetime.datetime.now()
 
-#单节点的取了对数的情况
+files = open("house_price_intermediate_parameters_2019-3-31183614.pickle", "rb")
+trials, space_nodes, best_nodes = pickle.load(files)
+files.close()
+
+nodes_list = [best_nodes]
+stacked_train, stacked_test = stacked_features_validate1(nodes_list, X_train_scaled, Y_train, X_test_scaled, 40, 30)
+#stacked_train, stacked_test = stacked_features_validate2(nodes_list, X_train_scaled, Y_train, X_test_scaled, 2, 2)
+save_stacked_dataset(stacked_train, stacked_test, "house_price")
+#lr_stacking_predict(nodes_list, data_test, stacked_train, Y_train, stacked_test, 2000)
+Y_train_temp = Y_train.values.flatten()
+Y_train = pd.DataFrame(data=Y_train_temp.astype(np.float32), columns=['SalePrice'])
+lasso_stacking_rscv_predict(nodes_list, data_test, stacked_train, Y_train, stacked_test, 600)
+
+end_time = datetime.datetime.now()
+print("time cost", (end_time - start_time))
+"""
+
+"""
+#单节点的取了对数的情况，感觉stacking还是必须的吧，肯定比单模型泛化能力强一些吧
+#其实取对数的情况最好在超参搜索的时候就进行考虑，现在还是勉强一试吧
+Y_train_temp = Y_train.values.reshape(-1,1)
+Y_train = pd.DataFrame(data=Y_train_temp.astype(np.float32), columns=['SalePrice'])
+X_split_train, X_split_test, Y_split_train, Y_split_test = train_test_split(X_train_scaled, Y_train, test_size=0.14)
+
+start_time = datetime.datetime.now()
+
+files = open("house_price_intermediate_parameters_2019-3-31183614.pickle", "rb")
+trials, space_nodes, best_nodes = pickle.load(files)
+files.close()
+
+nodes_list = [best_nodes]
+Y_train = np.log1p(Y_train)
+Y_train = pd.DataFrame(data=Y_train, columns=['SalePrice'])
+stacked_train, stacked_test = stacked_features_validate1(nodes_list, X_train_scaled, Y_train, X_test_scaled, 2, 2)
+#stacked_train, stacked_test = stacked_features_validate2(nodes_list, X_train_scaled, Y_train, X_test_scaled, 2, 2)
+save_stacked_dataset(stacked_train, stacked_test, "house_price")
+#lr_stacking_predict(nodes_list, data_test, stacked_train, Y_train, stacked_test, 2000)
+Y_train_temp = Y_train.values.flatten()
+Y_train = pd.DataFrame(data=Y_train_temp.astype(np.float32), columns=['SalePrice'])
+lasso_stacking_rscv_expm1_predict(nodes_list, data_test, stacked_train, Y_train, stacked_test, 600)
+
+end_time = datetime.datetime.now()
+print("time cost", (end_time - start_time))
+"""
+
+"""
 #多节点的取了对数的情况熬
+#单节点的取了对数的情况，感觉stacking还是必须的吧，肯定比单模型泛化能力强一些吧
+#其实取对数的情况最好在超参搜索的时候就进行考虑，现在还是勉强一试吧
+Y_train_temp = Y_train.values.reshape(-1,1)
+Y_train = pd.DataFrame(data=Y_train_temp.astype(np.float32), columns=['SalePrice'])
+X_split_train, X_split_test, Y_split_train, Y_split_test = train_test_split(X_train_scaled, Y_train, test_size=0.14)
+
+start_time = datetime.datetime.now()
+
+files = open("house_price_intermediate_parameters_2019-3-31183614.pickle", "rb")
+trials, space_nodes, best_nodes = pickle.load(files)
+files.close()
+
+nodes_list = [best_nodes, best_nodes, best_nodes, best_nodes, best_nodes]
+Y_train = np.log1p(Y_train)
+Y_train = pd.DataFrame(data=Y_train, columns=['SalePrice'])
+stacked_train, stacked_test = stacked_features_validate1(nodes_list, X_train_scaled, Y_train, X_test_scaled, 40, 30)
+#stacked_train, stacked_test = stacked_features_validate2(nodes_list, X_train_scaled, Y_train, X_test_scaled, 2, 2)
+save_stacked_dataset(stacked_train, stacked_test, "house_price")
+#lr_stacking_predict(nodes_list, data_test, stacked_train, Y_train, stacked_test, 2000)
+Y_train_temp = Y_train.values.flatten()
+Y_train = pd.DataFrame(data=Y_train_temp.astype(np.float32), columns=['SalePrice'])
+lasso_stacking_rscv_expm1_predict(nodes_list, data_test, stacked_train, Y_train, stacked_test, 600)
+
+end_time = datetime.datetime.now()
+print("time cost", (end_time - start_time))
+"""

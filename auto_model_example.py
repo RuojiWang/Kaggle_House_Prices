@@ -18,7 +18,7 @@
 #（3）record_best_model_rmse的方式可能需要修改，或许我们需要换种方式获取最佳模型咯，不对好像暂时还不能修改这个东西。
 #（4）create_nn_module函数可能需要修改，因为每层都有dropout或者修改为其他结构如回归问题咯。
 #（5）noise_augment_dataframe_data可能需要修改，因为Y_train或许也需要增加噪声的。
-#（6）nn_f可能需要修改，因为noise_augment_dataframe_data的columns需要修改咯，还有评价准则可能需要优化或者不需要加噪声吧？但是暂时不知如何优化
+#（6）nn_f1可能需要修改，因为noise_augment_dataframe_data的columns需要修改咯，还有评价准则可能需要优化或者不需要加噪声吧？但是暂时不知如何优化
 #（7）nn_stacking_f应该是被弃用了，因为之前我尝试过第二层使用神经网络或者tpot结果都不尽如人意咯，第二层使用逻辑回归才是王道。
 #（8）parse_nodes、parse_trials、space、space_nodes需要根据每次的数据修改，best_nodes本身不需要主要是为了快速测试而存在。max_epoch需要根据数据集大小调整。
 #（9）train_nn_model、train_nn_model_validate1或许需要换种方式获取最佳模型咯。现在已经找到最佳方式选择模型咯
@@ -465,7 +465,7 @@ def noise_augment_ndarray_data(mean, std, X_train, Y_train, columns):
 #the objective function and bayesian hyperparameters optimization will get the minimum value of which,
 #params is the current parameters of bayesian hyperparameters optimization.
 #which you can learn their usage scenarios from example code in the final of this file.
-def nn_f(params):
+def nn_f1(params):
     
     print("mean", params["mean"])
     print("std", params["std"])
@@ -539,6 +539,85 @@ def nn_f(params):
     #回归问题时，这里的方差应该越小越好吧
     #分类问题时，这里的准确率应该越大越好吧
     return metric1
+
+#the objective function for bayesian hyperparameters optimization.
+#params is the current parameters of bayesian hyperparameters optimization.
+#which you can learn their usage scenarios from example code in the final of this file.
+def nn_f2(params):
+    
+    print("mean", params["mean"])
+    print("std", params["std"])
+    print("lr", params["lr"])
+    print("optimizer__weight_decay", params["optimizer__weight_decay"])
+    print("criterion", params["criterion"])
+    print("batch_size", params["batch_size"])
+    print("optimizer__betas", params["optimizer__betas"])
+    print("bias", params["bias"])
+    print("weight_mode", params["weight_mode"])
+    print("patience", params["patience"])
+    print("input_nodes", params["input_nodes"])
+    print("hidden_layers", params["hidden_layers"])
+    print("hidden_nodes", params["hidden_nodes"])
+    print("output_nodes", params["output_nodes"])
+    print("percentage", params["percentage"])
+    
+    #我真的觉得这个做法很古怪，但是还是试一下吧，我的实践表明
+    rmse_list = []
+    rmsle_list = []
+    for i in range(0, 5):
+        #这边的rsg需要由NeuralNetClassifier修改为NeuralNetRegressor类型
+        rsg = NeuralNetRegressor( lr = params["lr"],
+                                  optimizer__weight_decay = params["optimizer__weight_decay"],
+                                  criterion = params["criterion"],
+                                  batch_size = params["batch_size"],
+                                  optimizer__betas = params["optimizer__betas"],
+                                  module = create_nn_module(params["input_nodes"], params["hidden_layers"], 
+                                                            params["hidden_nodes"], params["output_nodes"], params["percentage"]),
+                                  max_epochs = params["max_epochs"],
+                                  callbacks=[skorch.callbacks.EarlyStopping(patience=params["patience"])],
+                                  device = params["device"],
+                                  optimizer = params["optimizer"]
+                                  )
+        init_module(rsg.module, params["weight_mode"], params["bias"])
+        
+        #Y_temp = Y_split_train.values.reshape(Y_split_train.shape[0])
+        #rsg.fit(X_split_train.values.astype(np.float32), Y_split_train.values.astype(np.float32))
+        #你妈卖批的，我是真的不知道为什么一定要修改成下面的这个样子才能运行呢？
+        #现在应该有个更简单的办法实现这个部分，就是在split的时候就修改咯
+        #Y_temp = Y_split_train.values.reshape(-1,1)
+        #rsg.fit(X_split_train.values.astype(np.float32), Y_temp.astype(np.float32))
+        rsg.fit(X_split_train.values.astype(np.float32), Y_split_train.values.astype(np.float32))
+        
+        Y_pred = rsg.predict(X_split_test.values.astype(np.float32))
+        rmse = cal_rmse(np.expm1(Y_pred), Y_split_test.values)  
+        rmse_list.append(rmse)
+        rmsle = cal_rmsle(np.expm1(Y_pred), Y_split_test.values)
+        rmsle_list.append(rmsle)
+    
+    rmse_sum = 0.0
+    rmsle_sum = 0.0
+    for i in range(0, len(rmse_list)):
+        #如果存在nan的时候需要将其进行替换否则无法排序hyperopt报错= =！
+        #当rmse_list(本身类型为float类型的变量)，下面的判断成立的时候rmse_list为nan
+        #只有极少数的情况下才会启用下面的判断咯
+        if(rmse_list[i] != rmse_list[i]):
+            rmse_list[i] = 99999999999.9
+        rmse_sum += rmse_list[i]
+        
+        if(rmsle_list[i] != rmsle_list[i]):
+            rmsle_list[i] = 99999999999.9
+        rmsle_sum += rmsle_list[i]
+                
+    metric1 = rmse_sum/(len(rmse_list))
+    metric2 = rmsle_sum/(len(rmsle_list))
+     
+    print(metric1)
+    print(metric2)
+    print()    
+    #回归问题时，这里的方差应该越小越好吧
+    #分类问题时，这里的准确率应该越大越好吧
+    return metric1
+
 
 #parse best hyperparameters in the bayesian hyperparameters optimization,
 #trials is the record of bayesian hyperparameters optimization,
@@ -754,7 +833,7 @@ def train_nn_model_noise_validate1(nodes, X_train_scaled, Y_train, max_evals=10)
     return best_model, best_rmse
 
 #然后在这里增加一次噪声和验证咯，感觉我把程序弄的真的好复杂呀？
-#或许我下一阶段的实验就是查看是否nn_f不加入噪声只是第二阶段增加噪声效果是否更好？
+#或许我下一阶段的实验就是查看是否nn_f1不加入噪声只是第二阶段增加噪声效果是否更好？
 def train_nn_model_noise_validate2(nodes, X_train_scaled, Y_train, max_evals=10):
     
     X_split_train, X_split_test, Y_split_train, Y_split_test = train_test_split(X_train_scaled, Y_train, test_size=0.1)
@@ -1331,7 +1410,6 @@ def lasso_stacking_rscv_predict(nodes_list, data_test, stacked_train, Y_train, s
     #但是lasso本身是没有scoring的因为默认是返回The coefficient R^2的结果
     #RandomizedSearchCV的scoring可以设置为neg_mean_squared_error之类的东西
     #但是我个人觉得可能采用默认的值会取得更好的结果吧。
-    lr_pred = random_search.best_estimator_.predict(stacked_test)
 
     save_best_model(random_search.best_estimator_, nodes_list[0]["title"]+"_"+str(len(nodes_list)))
     Y_pred = random_search.best_estimator_.predict(stacked_test.values.astype(np.float32))
@@ -1352,6 +1430,56 @@ def lasso_stacking_rscv_predict(nodes_list, data_test, stacked_train, Y_train, s
     print()
     return random_search.best_estimator_, Y_pred
 
+#lasso after Y_train log1p, randomized search and cross validation for stacking data prediction,
+#nodes_list is the list of best hyperparameters for neural networks,
+#data_test is the test data,
+#stacked_train is the train data after stacking,
+#stacked_test is the test data after stacking,
+#max_evals is the iterations number of randomized search
+def lasso_stacking_rscv_expm1_predict(nodes_list, data_test, stacked_train, Y_train, stacked_test, max_evals=50):
+    
+    #Lasso回归的损失函数优化方法常用的有两种，坐标轴下降法和最小角回归法。
+    #LassoLars类采用的是最小角回归法，前面讲到的Lasso类采用的是坐标轴下降法。
+    #Lasso加上RandomizedSearchCV，基本上就大于LassoCV的，毕竟后者只是CV别个参数呢
+    rsg = Lasso(max_iter=8000, tol=0.01)
+    #这边的参数我觉得还是有必要进行这样的设置的，才能够比较好的表示
+    param_dist = {"alpha": np.linspace(-3, 5, 100),
+                  "fit_intercept": [True, False],
+                  "normalize": [True, False],
+                  "positive": [True, False],
+                  }
+    random_search = RandomizedSearchCV(rsg, param_distributions=param_dist, n_iter=max_evals)#,scoring ="mother_fucker" #,scoring ="mean_squared_error" #, scoring="neg_mean_squared_error")
+    random_search.fit(stacked_train, Y_train)
+    best_score = random_search.best_estimator_.score(stacked_train, Y_train)
+    #RandomizedSearchCV的fit和score返回的大概就是下面的结果
+    #RandomizedSearchCV implements a "fit" and a "score" method.
+    #It also implements "predict", "predict_proba", "decision_function",
+    #"transform" and "inverse_transform" if they are implemented in the
+    #estimator used. 
+    #但是lasso本身是没有scoring的因为默认是返回The coefficient R^2的结果
+    #RandomizedSearchCV的scoring可以设置为neg_mean_squared_error之类的东西
+    #但是我个人觉得可能采用默认的值会取得更好的结果吧。
+
+    save_best_model(random_search.best_estimator_, nodes_list[0]["title"]+"_"+str(len(nodes_list)))
+    Y_pred = random_search.best_estimator_.predict(stacked_test.values.astype(np.float32))
+    Y_pred = np.expm1(Y_pred)    
+    
+    data = {"Id":data_test["Id"], "SalePrice":Y_pred}
+    output = pd.DataFrame(data = data)
+            
+    output.to_csv(nodes_list[0]["path"], index=False)
+    print("prediction file has been written.")
+    
+    #这边不修改一下类型，绝壁是会报错的咯，反馈的错误太奇怪，导致调试花费了一些时间吧
+    rmse = cal_nnrsg_rmse(random_search.best_estimator_, stacked_train.values, np.expm1(Y_train.values))
+    print(rmse)
+    rmsle = cal_nnrsg_rmsle(random_search.best_estimator_, stacked_train.values, np.expm1(Y_train.values))
+    print(rmsle)
+     
+    print("the best coefficient R^2 of the model on the whole train dataset is:", best_score)
+    print()
+    return random_search.best_estimator_, Y_pred
+
 #useless function, I used it to try an idea but finally proved no use
 def svm_stacking_predict(nodes_list, data_test, stacked_train, Y_train, stacked_test, max_evals=50):
     
@@ -1360,7 +1488,6 @@ def svm_stacking_predict(nodes_list, data_test, stacked_train, Y_train, stacked_
     random_search = RandomizedSearchCV(lsvr, param_distributions=param_dist, n_iter=max_evals)
     random_search.fit(stacked_train, Y_train)
     best_rmse= random_search.best_estimator_.score(stacked_train, Y_train)
-    lr_pred = random_search.best_estimator_.predict(stacked_test)
 
     save_best_model(random_search.best_estimator_, nodes_list[0]["title"]+"_"+str(len(nodes_list)))
     Y_pred = random_search.best_estimator_.predict(stacked_test.values.astype(np.float32))
@@ -1421,7 +1548,7 @@ space = {"title":hp.choice("title", ["stacked_house_prices"]),
          #我按照赋值的方式对于偏置的范围进行计算，偏置几乎不会大于[-0.1, 0.1]
          #我测算了一下，按照普通的计算方式，下面的取值范围应该是比较合适的吧
          "bias":hp.choice("bias", [-0.03, -0.02, -0.01, 0, 0.01, 0.02, 0.03]),
-         "device":hp.choice("device", ["cpu"]),
+         "device":hp.choice("device", ["cuda"]),
          "optimizer":hp.choice("optimizer", [torch.optim.Adam])
          }
 
@@ -1466,7 +1593,7 @@ space_nodes = {"title":["stacked_house_prices"],
                "weight_mode":[1, 2, 3, 4, 5, 6, 7,
                               8, 9, 10, 11, 12, 13],
                "bias":[-0.03, -0.02, -0.01, 0, 0.01, 0.02, 0.03],
-               "device":["cpu"],
+               "device":["cuda"],
                "optimizer":[torch.optim.Adam]
                }
 
@@ -1491,10 +1618,11 @@ best_nodes = {"title":"stacked_house_prices",
               "percentage":0.2,
               "weight_mode":1,
               "bias":0.0,
-              "device":"cpu",
+              "device":"cuda",
               "optimizer":torch.optim.Adam
               }
 
+"""
 #run the following code for running environment test
 #reshape data for RMSELoss, or you will get error
 #split train data and validation data for best hyperparameters selection.
@@ -1506,7 +1634,7 @@ start_time = datetime.datetime.now()
 trials = Trials()
 algo = partial(tpe.suggest, n_startup_jobs=10)
 #max_evals determine hyperparameters search times, bigger max_evals may lead to better results.
-best_params = fmin(nn_f, space, algo=algo, max_evals=2, trials=trials)
+best_params = fmin(nn_f1, space, algo=algo, max_evals=2, trials=trials)
 
 #save the result of the hyperopt(bayesian optimization) search.
 best_nodes = parse_nodes(trials, space_nodes)
@@ -1537,6 +1665,54 @@ lasso_stacking_rscv_predict(nodes_list, data_test, stacked_train, Y_train, stack
 #print time cost
 end_time = datetime.datetime.now()
 print("time cost", (end_time - start_time))
+"""
+
+#I recommand you use following code for neural network model training and prediction.
+#use hyperopt(bayesian optimization) to search the best network structure.
+#have a look at hyperopt will help in understanding the following code.
+#split train data and validation data for best hyperparameters selection.
+Y_train_temp = Y_train.values.reshape(-1,1)
+#use log1p function to make Y_train fit the normal distribution, which is helpful for model training.
+#log1p and exp1m are inverse function to each other, log1p for training and exp1m for error estimation.
+Y_train_temp = np.log1p(Y_train_temp)
+Y_train = pd.DataFrame(data=Y_train_temp.astype(np.float32), columns=['SalePrice'])
+X_split_train, X_split_test, Y_split_train, Y_split_test = train_test_split(X_train_scaled, Y_train, test_size=0.14)
+
+start_time = datetime.datetime.now()
+trials = Trials()
+algo = partial(tpe.suggest, n_startup_jobs=10)
+#max_evals determine hyperparameters search times, bigger max_evals may lead to better results.
+best_params = fmin(nn_f2, space, algo=algo, max_evals=2, trials=trials)
+
+#save the result of the hyperopt(bayesian optimization) search.
+best_nodes = parse_nodes(trials, space_nodes)
+save_inter_params(trials, space_nodes, best_nodes, "house_price")
+
+#use 5 best nodes to create 5 neural network model for stacking.
+nodes_list = [best_nodes, best_nodes]
+#the following code can change the settings of the stacking process
+#you may use it as following when you need.
+#change settings except device or path is not recommended, cause you may lost best hyperparameters.
+#if you must use specific parameters, set it and start hyperparameters once more.
+#for item in nodes_list:
+#    item["device"] = "cpu" #set the device to train neural network, "cpu" means using cpu, "cuda" means using gpu.
+#    item["batch_size"] = 256 #set the batch_size of the neural network.
+#    item["path"] = "House_Prices_Prediction.csv" #set the file path of the prediction file.
+#neural network model stacking. I recommend using stacked_features_validate1 or stacked_features_validate2
+#the first one can save training time, 40 and 25 are fine choice for the last two function parameters.
+#the second one has less overfitting risk, 30 and 35 are fine choice for the last two function parameters.  
+stacked_train, stacked_test = stacked_features_validate1(nodes_list, X_train_scaled, Y_train, X_test_scaled, 2, 2)
+#save the stacking intermediate result.
+save_stacked_dataset(stacked_train, stacked_test, "house_price")
+
+#reshape data for RandomizedSearchCV, or you will get error
+Y_train_temp = Y_train.values.flatten()
+Y_train = pd.DataFrame(data=Y_train_temp.astype(np.float32), columns=['SalePrice'])
+#use lasso to fit stacked_train/stacked_test and predict the result. 
+lasso_stacking_rscv_expm1_predict(nodes_list, data_test, stacked_train, Y_train, stacked_test, 600)
+#print time cost
+end_time = datetime.datetime.now()
+print("time cost", (end_time - start_time))
 
 """
 #run the following code for neural network model training and prediction.
@@ -1551,7 +1727,7 @@ start_time = datetime.datetime.now()
 trials = Trials()
 algo = partial(tpe.suggest, n_startup_jobs=10)
 #max_evals determine hyperparameters search times, bigger max_evals may lead to better results.
-best_params = fmin(nn_f, space, algo=algo, max_evals=2200, trials=trials)
+best_params = fmin(nn_f1, space, algo=algo, max_evals=2200, trials=trials)
 
 #save the result of the hyperopt(bayesian optimization) search.
 best_nodes = parse_nodes(trials, space_nodes)
@@ -1597,7 +1773,7 @@ start_time = datetime.datetime.now()
 trials = Trials()
 algo = partial(tpe.suggest, n_startup_jobs=10)
 #max_evals determine hyperparameters search times, bigger max_evals may lead to better results.
-best_params = fmin(nn_f, space, algo=algo, max_evals=2200, trials=trials)
+best_params = fmin(nn_f1, space, algo=algo, max_evals=2200, trials=trials)
 
 #save the result of the hyperopt(bayesian optimization) search.
 best_nodes = parse_nodes(trials, space_nodes)
