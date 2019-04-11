@@ -254,6 +254,16 @@ def cal_nnrsg_rmsle(rsg, X_train, Y_train):
     Y_train_pred = rsg.predict(X_train.astype(np.float32))
     return cal_rmsle(Y_train_pred, Y_train)
 
+def cal_nnrsg_expm1_rmse(rsg, X_train, Y_train):
+    
+    Y_train_pred = rsg.predict(X_train.astype(np.float32))
+    return cal_rmse(np.expm1(Y_train_pred), Y_train)
+
+def cal_nnrsg_expm1_rmsle(rsg, X_train, Y_train):
+    
+    Y_train_pred = rsg.predict(X_train.astype(np.float32))
+    return cal_rmsle(np.expm1(Y_train_pred), Y_train)
+
 def exist_files(title):
     
     return os.path.exists(title+"_best_model.pickle")
@@ -1375,9 +1385,9 @@ def lasso_stacking_rscv_expm1_predict(nodes_list, data_test, stacked_train, Y_tr
     print("prediction file has been written.")
     
     #这边不修改一下类型，绝壁是会报错的咯，反馈的错误太奇怪，导致调试花费了一些时间吧
-    rmse = cal_nnrsg_rmse(random_search.best_estimator_, stacked_train.values, np.expm1(Y_train.values))
+    rmse = cal_nnrsg_expm1_rmse(random_search.best_estimator_, stacked_train.values, np.expm1(Y_train.values))
     print(rmse)
-    rmsle = cal_nnrsg_rmsle(random_search.best_estimator_, stacked_train.values, np.expm1(Y_train.values))
+    rmsle = cal_nnrsg_expm1_rmsle(random_search.best_estimator_, stacked_train.values, np.expm1(Y_train.values))
     print(rmsle)
      
     print("the best coefficient R^2 of the model on the whole train dataset is:", best_score)
@@ -1576,7 +1586,6 @@ end_time = datetime.datetime.now()
 print("time cost", (end_time - start_time))
 """
 
-"""
 #单节点的取了对数的情况，感觉stacking还是必须的吧，肯定比单模型泛化能力强一些吧
 #其实取对数的情况最好在超参搜索的时候就进行考虑，现在还是勉强一试吧
 Y_train_temp = Y_train.values.reshape(-1,1)
@@ -1592,7 +1601,7 @@ files.close()
 nodes_list = [best_nodes]
 Y_train = np.log1p(Y_train)
 Y_train = pd.DataFrame(data=Y_train, columns=['SalePrice'])
-stacked_train, stacked_test = stacked_features_validate1(nodes_list, X_train_scaled, Y_train, X_test_scaled, 2, 2)
+stacked_train, stacked_test = stacked_features_validate1(nodes_list, X_train_scaled, Y_train, X_test_scaled, 20, 2)
 #stacked_train, stacked_test = stacked_features_validate2(nodes_list, X_train_scaled, Y_train, X_test_scaled, 2, 2)
 save_stacked_dataset(stacked_train, stacked_test, "house_price")
 #lr_stacking_predict(nodes_list, data_test, stacked_train, Y_train, stacked_test, 2000)
@@ -1602,7 +1611,6 @@ lasso_stacking_rscv_expm1_predict(nodes_list, data_test, stacked_train, Y_train,
 
 end_time = datetime.datetime.now()
 print("time cost", (end_time - start_time))
-"""
 
 """
 #多节点的取了对数的情况熬

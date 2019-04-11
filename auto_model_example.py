@@ -193,6 +193,20 @@ def cal_nnrsg_rmsle(rsg, X_train, Y_train):
     Y_train_pred = rsg.predict(X_train.astype(np.float32))
     return cal_rmsle(Y_train_pred, Y_train)
 
+#calculate the rmse of prediction of classifier, 
+#rsg is classifier Y_train_pred after np.expm1 is prediction and Y_train is truth
+def cal_nnrsg_expm1_rmse(rsg, X_train, Y_train):
+    
+    Y_train_pred = rsg.predict(X_train.astype(np.float32))
+    return cal_rmse(np.expm1(Y_train_pred), Y_train)
+
+#calculate the rmsle of prediction of classifier, 
+#rsg is classifier Y_train_pred after np.expm1 is prediction and Y_train is truth
+def cal_nnrsg_expm1_rmsle(rsg, X_train, Y_train):
+    
+    Y_train_pred = rsg.predict(X_train.astype(np.float32))
+    return cal_rmsle(np.expm1(Y_train_pred), Y_train)
+
 #determine whether the file named title_best_model.pickle exists, title is part name of the file
 def exist_files(title):
     
@@ -589,9 +603,9 @@ def nn_f2(params):
         rsg.fit(X_split_train.values.astype(np.float32), Y_split_train.values.astype(np.float32))
         
         Y_pred = rsg.predict(X_split_test.values.astype(np.float32))
-        rmse = cal_rmse(np.expm1(Y_pred), Y_split_test.values)  
+        rmse = cal_rmse(np.expm1(Y_pred), np.expm1(Y_split_test.values))  
         rmse_list.append(rmse)
-        rmsle = cal_rmsle(np.expm1(Y_pred), Y_split_test.values)
+        rmsle = cal_rmsle(np.expm1(Y_pred), np.expm1(Y_split_test.values))
         rmsle_list.append(rmsle)
     
     rmse_sum = 0.0
@@ -1471,9 +1485,9 @@ def lasso_stacking_rscv_expm1_predict(nodes_list, data_test, stacked_train, Y_tr
     print("prediction file has been written.")
     
     #这边不修改一下类型，绝壁是会报错的咯，反馈的错误太奇怪，导致调试花费了一些时间吧
-    rmse = cal_nnrsg_rmse(random_search.best_estimator_, stacked_train.values, np.expm1(Y_train.values))
+    rmse = cal_nnrsg_expm1_rmse(random_search.best_estimator_, stacked_train.values, np.expm1(Y_train.values))
     print(rmse)
-    rmsle = cal_nnrsg_rmsle(random_search.best_estimator_, stacked_train.values, np.expm1(Y_train.values))
+    rmsle = cal_nnrsg_expm1_rmsle(random_search.best_estimator_, stacked_train.values, np.expm1(Y_train.values))
     print(rmsle)
      
     print("the best coefficient R^2 of the model on the whole train dataset is:", best_score)
@@ -1682,14 +1696,14 @@ start_time = datetime.datetime.now()
 trials = Trials()
 algo = partial(tpe.suggest, n_startup_jobs=10)
 #max_evals determine hyperparameters search times, bigger max_evals may lead to better results.
-best_params = fmin(nn_f2, space, algo=algo, max_evals=2, trials=trials)
+best_params = fmin(nn_f2, space, algo=algo, max_evals=440, trials=trials)
 
 #save the result of the hyperopt(bayesian optimization) search.
 best_nodes = parse_nodes(trials, space_nodes)
 save_inter_params(trials, space_nodes, best_nodes, "house_price")
 
 #use 5 best nodes to create 5 neural network model for stacking.
-nodes_list = [best_nodes, best_nodes]
+nodes_list = [best_nodes, best_nodes, best_nodes, best_nodes, best_nodes]
 #the following code can change the settings of the stacking process
 #you may use it as following when you need.
 #change settings except device or path is not recommended, cause you may lost best hyperparameters.
@@ -1701,7 +1715,7 @@ nodes_list = [best_nodes, best_nodes]
 #neural network model stacking. I recommend using stacked_features_validate1 or stacked_features_validate2
 #the first one can save training time, 40 and 25 are fine choice for the last two function parameters.
 #the second one has less overfitting risk, 30 and 35 are fine choice for the last two function parameters.  
-stacked_train, stacked_test = stacked_features_validate1(nodes_list, X_train_scaled, Y_train, X_test_scaled, 2, 2)
+stacked_train, stacked_test = stacked_features_validate1(nodes_list, X_train_scaled, Y_train, X_test_scaled, 40, 30)
 #save the stacking intermediate result.
 save_stacked_dataset(stacked_train, stacked_test, "house_price")
 
