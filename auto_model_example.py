@@ -1364,6 +1364,60 @@ def stacked_features_noise_validate4(nodes_list, X_train_scaled, Y_train, X_test
     return stacked_train, stacked_test
 
 #useless function, I used it to try an idea but finally proved no use
+def nn_predict(best_nodes, X_train_scaled, Y_train, X_test_scaled, max_evals):
+    
+    best_model, best_rmse = train_nn_model_validate1(best_nodes, X_train_scaled.values, Y_train.values, max_evals)
+    Y_pred = best_model.predict(X_test_scaled.values.astype(np.float32))
+    
+    #这边并不是需要对data_test进行预测和写入文件
+    Y_pred = Y_pred.flatten()
+    data = {"Id":data_test["Id"], "SalePrice":np.expm1(Y_pred)}
+    output = pd.DataFrame(data = data)        
+    output.to_csv(best_nodes["path"], index=False)
+    print("prediction file has been written.")
+
+#useless function, I used it to try an idea but finally proved no use
+def nn_k_folds_predict(best_nodes, X_train_scaled, Y_train, X_test_scaled, n_folds, max_evals):
+    
+    """K-fold stacking"""
+    num_train, num_test = X_train_scaled.shape[0], X_test_scaled.shape[0]
+    oof_train = np.zeros((num_train,)) 
+    oof_test = np.zeros((num_test,))
+    oof_test_all_fold = np.zeros((num_test, n_folds))
+    train_rmse = []
+    valida_rmse = []
+
+    KF = KFold(n_splits =n_folds, shuffle=True)
+    for i, (train_index, valida_index) in enumerate(KF.split(X_train_scaled)):
+        #划分数据集
+        X_split_train, Y_split_train = X_train_scaled[train_index], Y_train[train_index]
+        X_split_valida, Y_split_valida = X_train_scaled[valida_index], Y_train[valida_index]
+        
+        best_model, best_rmse= train_nn_model_validate1(best_nodes, X_split_train, Y_split_train, max_evals)
+        
+        rmse1 = cal_nnrsg_rmse(best_model, X_split_train, Y_split_train)
+        rmsle1 = cal_nnrsg_rmsle(best_model, X_split_train, Y_split_train)
+        print(rmse1)
+        print(rmsle1)
+        train_rmse.append(rmse1)
+        rmse2 = cal_nnrsg_rmse(best_model, X_split_valida, Y_split_valida)
+        rmsle2 = cal_nnrsg_rmsle(best_model, X_split_valida, Y_split_valida)
+        print(rmse2)
+        print(rmsle2)
+        valida_rmse.append(rmse2)
+        
+        oof_train[valida_index] = (best_model.predict(X_split_valida.astype(np.float32))).reshape(1,-1)
+        oof_test_all_fold[:, i] = (best_model.predict(X_test_scaled.astype(np.float32))).reshape(1,-1)
+        
+    oof_test = np.mean(oof_test_all_fold, axis=1)
+    
+    data = {"Id":data_test["Id"], "SalePrice":np.expm1(oof_test)}
+    output = pd.DataFrame(data = data)
+    
+    output.to_csv(best_nodes["path"], index=False)
+    print("prediction file has been written.")
+
+#useless function, I used it to try an idea but finally proved no use
 def lr_stacking_predict(nodes_list, data_test, stacked_train, Y_train, stacked_test, max_evals=2000):
     
     rsg = LinearRegression()
@@ -1392,6 +1446,30 @@ def lr_stacking_predict(nodes_list, data_test, stacked_train, Y_train, stacked_t
     best_rmse = cal_nnrsg_rmse(rsg, stacked_train.values, Y_train.values)
     print(best_rmse)
     best_rmsle = cal_nnrsg_rmsle(rsg, stacked_train.values, Y_train.values)
+    print(best_rmsle)
+    return rsg, Y_pred
+
+#useless function, I used it to try an idea but finally proved no use
+def lr_stacking_expm1_predict(nodes_list, data_test, stacked_train, Y_train, stacked_test):
+    
+    rsg = LinearRegression()
+    rsg.fit(stacked_train, Y_train)
+
+    save_best_model(rsg, nodes_list[0]["title"]+"_"+str(len(nodes_list)))
+    Y_pred = np.round((rsg.predict(stacked_test.values.astype(np.float32))).flatten(), decimals=1)
+
+    data = {"Id":data_test["Id"], "SalePrice":np.expm1(Y_pred)}
+    output = pd.DataFrame(data = data)
+            
+    output.to_csv(nodes_list[0]["path"], index=False)
+    print("prediction file has been written.")
+    
+    #这边的API确实是调用score。。线性回归的score也是表示R^2的相关性的样子。。
+    best_score= rsg.score(stacked_train, Y_train) 
+    print(best_score)
+    best_rmse = cal_nnrsg_expm1_rmse(rsg, stacked_train.values, np.expm1(Y_train.values))
+    print(best_rmse)
+    best_rmsle = cal_nnrsg_expm1_rmsle(rsg, stacked_train.values, np.expm1(Y_train.values))
     print(best_rmsle)
     return rsg, Y_pred
 
