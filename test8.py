@@ -191,6 +191,16 @@ class RMSELoss(nn.Module):
         """
         return torch.sqrt(torch.mean((pred-truth)**2))
 
+#测试一哈问题所在咯,果然RMSLELoss是无法进行神经网络训练滴
+class RMSLELoss(nn.Module):
+    def __init__(self):
+        super(RMSLELoss, self).__init__()
+        
+    def forward(self, pred, truth):
+        pred = torch.log(pred) 
+        truth = torch.log(truth)
+        return torch.sqrt(torch.mean((pred-truth)**2))
+        
 def isclose(a, b, rel_tol=1e-09, abs_tol=0.0):
     return abs(a-b) <= max(rel_tol * max(abs(a), abs(b)), abs_tol)    
 
@@ -1454,7 +1464,7 @@ best_nodes = {"title":"stacked_house_prices",
               "patience":5,
               "lr":0.00010,
               "optimizer__weight_decay":0.005,
-              "criterion":RMSELoss,
+              "criterion":RMSLELoss,
               "batch_size":128,
               "optimizer__betas":[0.86, 0.999],
               "input_nodes":292,
@@ -1522,9 +1532,11 @@ print(Y_train1[1])
 print(Y_train2[1])
 """
 
+"""
 #这个实验有问题，应该是使用了np.log1p和np.expm1没有还原吧
 #现在还原一下做个实验呢,果然进行还原就能够正常运行了
 #但是现在检查一下np.log1p和np.expm1前后数值是否完全一致呢
+#其实这个实验意义不大，毕竟之前的超参搜索都是按照非np.logip的数据进行的
 rmse_list = []
 rmsle_list = []
 
@@ -1787,4 +1799,35 @@ print("time cost", (end_time - start_time))
 for i in range(0, len(rmse_list)):
     print(rmse_list[i])
     print(rmsle_list[i])
-    
+"""
+
+"""
+#这个主要是在测试一下RMSLELoss为什么计算出nan，其实在其内部打断点单步调试就知道了
+Y_train_temp = Y_train.values.reshape(-1,1)
+Y_train = pd.DataFrame(data=Y_train_temp.astype(np.float32), columns=['SalePrice'])
+X_split_train, X_split_test, Y_split_train, Y_split_test = train_test_split(X_train_scaled, Y_train, test_size=0.14)
+
+best_rmse = 99999999999.9
+best_model = 0.0
+for j in range(0, 2):
+        
+    rsg = NeuralNetRegressor(lr = best_nodes["lr"],
+                             optimizer__weight_decay = best_nodes["optimizer__weight_decay"],
+                             criterion = best_nodes["criterion"],
+                             batch_size = best_nodes["batch_size"],
+                             optimizer__betas = best_nodes["optimizer__betas"],
+                             module = create_nn_module(best_nodes["input_nodes"], best_nodes["hidden_layers"], 
+                                                       best_nodes["hidden_nodes"], best_nodes["output_nodes"], best_nodes["percentage"]),
+                             max_epochs = best_nodes["max_epochs"],
+                             callbacks=[skorch.callbacks.EarlyStopping(patience=best_nodes["patience"])],
+                             device = "cuda",
+                             optimizer = best_nodes["optimizer"]
+                            )
+    init_module(rsg.module, best_nodes["weight_mode"], best_nodes["bias"])
+    rsg.fit(X_train_scaled.values.astype(np.float32), Y_train.values.astype(np.float32))
+            
+    #Y_pred = rsg.predict(X_split_test.astype(np.float32))
+    metric = cal_nnrsg_rmse(rsg, X_train_scaled, Y_train)
+        
+    best_model, best_rmse, flag = record_best_model_rmse(rsg, metric, best_model, best_rmse)        
+"""

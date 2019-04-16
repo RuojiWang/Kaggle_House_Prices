@@ -105,6 +105,7 @@ data_all = pd.concat([data_train, data_test], axis=0)
 #2）存在缺失的时候，只要缺失不超过总数2919的10%就直接用众数和均值填充
 #3）最后如果存在个别属性和预测结果高度相关的，单独对这个属性进行预测。
 data_all["MSZoning"].fillna(data_all["MSZoning"].mode()[0], inplace=True)
+print(data_all[data_all["MSZoning"].isnull().values==True])
 
 #下面的这个属性一共有80行是空的，所以现在用平均数填补吧
 #更理想的情况下应该是根据其他属性预测出一个结果吧，但是后期再说吧
