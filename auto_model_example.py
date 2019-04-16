@@ -1672,7 +1672,10 @@ space_nodes = {"title":["stacked_house_prices"],
                      0.00171, 0.00172, 0.00173, 0.00174, 0.00175, 0.00176, 0.00177, 0.00178, 0.00179, 0.00180],
                "optimizer__weight_decay":[0.000, 0.00000001, 0.000001, 0.0001, 0.01],
                "criterion":[RMSELoss],
+               #这个参数使用固定值主要是考虑计算时间
                "batch_size":[128],
+               #这个参数使用默认参数能够减少超参搜索范围，从而获得更加结果？
+               #但是就这个练手项目而言，就暂时先是这个样子了吧。
                "optimizer__betas":[[0.88, 0.9991], [0.88, 0.9993], [0.88, 0.9995], [0.88, 0.9997], [0.88, 0.9999],
                                    [0.90, 0.9991], [0.90, 0.9993], [0.90, 0.9995], [0.90, 0.9997], [0.90, 0.9999],
                                    [0.92, 0.9991], [0.92, 0.9993], [0.92, 0.9995], [0.92, 0.9997], [0.92, 0.9999]],
@@ -1714,7 +1717,6 @@ best_nodes = {"title":"stacked_house_prices",
               "optimizer":torch.optim.Adam
               }
 
-"""
 #run the following code for running environment test
 #reshape data for RMSELoss, or you will get error
 #split train data and validation data for best hyperparameters selection.
@@ -1757,8 +1759,9 @@ lasso_stacking_rscv_predict(nodes_list, data_test, stacked_train, Y_train, stack
 #print time cost
 end_time = datetime.datetime.now()
 print("time cost", (end_time - start_time))
-"""
 
+
+"""
 #I recommand you use following code for neural network model training and prediction.
 #use hyperopt(bayesian optimization) to search the best network structure.
 #have a look at hyperopt will help in understanding the following code.
@@ -1805,6 +1808,7 @@ lasso_stacking_rscv_expm1_predict(nodes_list, data_test, stacked_train, Y_train,
 #print time cost
 end_time = datetime.datetime.now()
 print("time cost", (end_time - start_time))
+"""
 
 """
 #run the following code for neural network model training and prediction.
