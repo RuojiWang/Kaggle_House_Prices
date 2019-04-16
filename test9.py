@@ -552,7 +552,7 @@ def nn_f1(params):
     print()    
     #回归问题时，这里的方差应该越小越好吧
     #分类问题时，这里的准确率应该越大越好吧
-    return metric1
+    return metric2
 
 #the objective function for bayesian hyperparameters optimization.
 #params is the current parameters of bayesian hyperparameters optimization.
@@ -630,7 +630,7 @@ def nn_f2(params):
     print()    
     #回归问题时，这里的方差应该越小越好吧
     #分类问题时，这里的准确率应该越大越好吧
-    return metric1
+    return metric2
 
 
 #parse best hyperparameters in the bayesian hyperparameters optimization,

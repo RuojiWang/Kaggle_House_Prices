@@ -552,7 +552,7 @@ def nn_f1(params):
     print()    
     #回归问题时，这里的方差应该越小越好吧
     #分类问题时，这里的准确率应该越大越好吧
-    return metric1
+    return metric2
 
 #the objective function for bayesian hyperparameters optimization.
 #params is the current parameters of bayesian hyperparameters optimization.
@@ -630,7 +630,7 @@ def nn_f2(params):
     print()    
     #回归问题时，这里的方差应该越小越好吧
     #分类问题时，这里的准确率应该越大越好吧
-    return metric1
+    return metric2
 
 
 #parse best hyperparameters in the bayesian hyperparameters optimization,
@@ -1596,6 +1596,7 @@ def svm_stacking_predict(nodes_list, data_test, stacked_train, Y_train, stacked_
     
 #现在直接利用经验参数值进行搜索咯，这样可以节约计算资源
 #space is the optimization space of bayesian hyperparameters
+#narrow the space of bayesian hyperparameters to get better optimization results
 space = {"title":hp.choice("title", ["stacked_house_prices"]),
          "path":hp.choice("path", ["House_Prices_Prediction.csv"]),
          "mean":hp.choice("mean", [0]),
@@ -1620,14 +1621,11 @@ space = {"title":hp.choice("title", ["stacked_house_prices"]),
                                0.00151, 0.00152, 0.00153, 0.00154, 0.00155, 0.00156, 0.00157, 0.00158, 0.00159, 0.00160,
                                0.00161, 0.00162, 0.00163, 0.00164, 0.00165, 0.00166, 0.00167, 0.00168, 0.00169, 0.00170,
                                0.00171, 0.00172, 0.00173, 0.00174, 0.00175, 0.00176, 0.00177, 0.00178, 0.00179, 0.00180]),  
-         "optimizer__weight_decay":hp.choice("optimizer__weight_decay",[0.000, 0.00000001, 0.000001, 0.0001, 0.01]),  
+         "optimizer__weight_decay":hp.choice("optimizer__weight_decay",[0.000]),  
          "criterion":hp.choice("criterion", [RMSELoss]),
 
          "batch_size":hp.choice("batch_size", [128]),
-         "optimizer__betas":hp.choice("optimizer__betas",
-                                      [[0.88, 0.9991], [0.88, 0.9993], [0.88, 0.9995], [0.88, 0.9997], [0.88, 0.9999],
-                                       [0.90, 0.9991], [0.90, 0.9993], [0.90, 0.9995], [0.90, 0.9997], [0.90, 0.9999],
-                                       [0.92, 0.9991], [0.92, 0.9993], [0.92, 0.9995], [0.92, 0.9997], [0.92, 0.9999]]),
+         "optimizer__betas":hp.choice("optimizer__betas",[[0.90, 0.9999]]),
          "input_nodes":hp.choice("input_nodes", [292]),
          "hidden_layers":hp.choice("hidden_layers", [1, 3, 5, 7, 9, 11]), 
          "hidden_nodes":hp.choice("hidden_nodes", [300, 350, 400, 450, 500, 550, 600, 650, 700, 
@@ -1670,15 +1668,13 @@ space_nodes = {"title":["stacked_house_prices"],
                      0.00151, 0.00152, 0.00153, 0.00154, 0.00155, 0.00156, 0.00157, 0.00158, 0.00159, 0.00160,
                      0.00161, 0.00162, 0.00163, 0.00164, 0.00165, 0.00166, 0.00167, 0.00168, 0.00169, 0.00170,
                      0.00171, 0.00172, 0.00173, 0.00174, 0.00175, 0.00176, 0.00177, 0.00178, 0.00179, 0.00180],
-               "optimizer__weight_decay":[0.000, 0.00000001, 0.000001, 0.0001, 0.01],
+               "optimizer__weight_decay":[0.000],
                "criterion":[RMSELoss],
                #这个参数使用固定值主要是考虑计算时间
                "batch_size":[128],
                #这个参数使用默认参数能够减少超参搜索范围，从而获得更加结果？
                #但是就这个练手项目而言，就暂时先是这个样子了吧。
-               "optimizer__betas":[[0.88, 0.9991], [0.88, 0.9993], [0.88, 0.9995], [0.88, 0.9997], [0.88, 0.9999],
-                                   [0.90, 0.9991], [0.90, 0.9993], [0.90, 0.9995], [0.90, 0.9997], [0.90, 0.9999],
-                                   [0.92, 0.9991], [0.92, 0.9993], [0.92, 0.9995], [0.92, 0.9997], [0.92, 0.9999]],
+               "optimizer__betas":[[0.90, 0.999]],
                "input_nodes":[292],
                "hidden_layers":[1, 3, 5, 7, 9, 11], 
                "hidden_nodes":[300, 350, 400, 450, 500, 550, 600, 650, 700, 
@@ -1702,10 +1698,10 @@ best_nodes = {"title":"stacked_house_prices",
               "max_epochs":3000,
               "patience":5,
               "lr":0.00010,
-              "optimizer__weight_decay":0.005,
+              "optimizer__weight_decay":0.000,
               "criterion":RMSELoss,
               "batch_size":128,
-              "optimizer__betas":[0.86, 0.999],
+              "optimizer__betas":[0.90, 0.999],
               "input_nodes":292,
               "hidden_layers":3,
               "hidden_nodes":300,
@@ -1760,7 +1756,6 @@ lasso_stacking_rscv_predict(nodes_list, data_test, stacked_train, Y_train, stack
 end_time = datetime.datetime.now()
 print("time cost", (end_time - start_time))
 
-
 """
 #I recommand you use following code for neural network model training and prediction.
 #use hyperopt(bayesian optimization) to search the best network structure.
@@ -1777,7 +1772,7 @@ start_time = datetime.datetime.now()
 trials = Trials()
 algo = partial(tpe.suggest, n_startup_jobs=10)
 #max_evals determine hyperparameters search times, bigger max_evals may lead to better results.
-best_params = fmin(nn_f2, space, algo=algo, max_evals=440, trials=trials)
+best_params = fmin(nn_f2, space, algo=algo, max_evals=10800, trials=trials)
 
 #save the result of the hyperopt(bayesian optimization) search.
 best_nodes = parse_nodes(trials, space_nodes)

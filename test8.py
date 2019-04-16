@@ -563,7 +563,7 @@ def nn_f(params):
     print()    
     #回归问题时，这里的方差应该越小越好吧
     #分类问题时，这里的准确率应该越大越好吧
-    return metric1
+    return metric2
 
 def parse_nodes(trials, space_nodes):
     
