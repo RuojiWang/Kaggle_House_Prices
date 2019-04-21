@@ -1486,7 +1486,7 @@ def lasso_stacking_rscv_predict(nodes_list, data_test, stacked_train, Y_train, s
     #Lasso加上RandomizedSearchCV，基本上就大于LassoCV的，毕竟后者只是CV别个参数呢
     rsg = Lasso(max_iter=8000, tol=0.01)
     #这边的参数我觉得还是有必要进行这样的设置的，才能够比较好的表示
-    param_dist = {"alpha": np.linspace(-3, 5, 100),
+    param_dist = {"alpha": np.logspace(-3, 5, 100),
                   "fit_intercept": [True, False],
                   "normalize": [True, False],
                   "positive": [True, False],
@@ -1535,7 +1535,7 @@ def lasso_stacking_rscv_expm1_predict(nodes_list, data_test, stacked_train, Y_tr
     #Lasso加上RandomizedSearchCV，基本上就大于LassoCV的，毕竟后者只是CV别个参数呢
     rsg = Lasso(max_iter=8000, tol=0.01)
     #这边的参数我觉得还是有必要进行这样的设置的，才能够比较好的表示
-    param_dist = {"alpha": np.linspace(-3, 5, 100),
+    param_dist = {"alpha": np.logspace(-3, 5, 100),
                   "fit_intercept": [True, False],
                   "normalize": [True, False],
                   "positive": [True, False],
