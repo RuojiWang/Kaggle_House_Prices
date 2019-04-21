@@ -496,63 +496,28 @@ def nn_f1(params):
     print("hidden_nodes", params["hidden_nodes"])
     print("output_nodes", params["output_nodes"])
     print("percentage", params["percentage"])
-    
-    #我真的觉得这个做法很古怪，但是还是试一下吧，我的实践表明
-    rmse_list = []
-    rmsle_list = []
-    for i in range(0, 5):
-        #这边的rsg需要由NeuralNetClassifier修改为NeuralNetRegressor类型
-        rsg = NeuralNetRegressor( lr = params["lr"],
-                                  optimizer__weight_decay = params["optimizer__weight_decay"],
-                                  criterion = params["criterion"],
-                                  batch_size = params["batch_size"],
-                                  optimizer__betas = params["optimizer__betas"],
-                                  module = create_nn_module(params["input_nodes"], params["hidden_layers"], 
-                                                            params["hidden_nodes"], params["output_nodes"], params["percentage"]),
-                                  max_epochs = params["max_epochs"],
-                                  callbacks=[skorch.callbacks.EarlyStopping(patience=params["patience"])],
-                                  device = params["device"],
-                                  optimizer = params["optimizer"]
-                                  )
-        init_module(rsg.module, params["weight_mode"], params["bias"])
         
-        #Y_temp = Y_split_train.values.reshape(Y_split_train.shape[0])
-        #rsg.fit(X_split_train.values.astype(np.float32), Y_split_train.values.astype(np.float32))
-        #你妈卖批的，我是真的不知道为什么一定要修改成下面的这个样子才能运行呢？
-        #现在应该有个更简单的办法实现这个部分，就是在split的时候就修改咯
-        #Y_temp = Y_split_train.values.reshape(-1,1)
-        #rsg.fit(X_split_train.values.astype(np.float32), Y_temp.astype(np.float32))
-        rsg.fit(X_split_train.values.astype(np.float32), Y_split_train.values.astype(np.float32))
+    rsg = NeuralNetRegressor(lr = params["lr"],
+                             optimizer__weight_decay = params["optimizer__weight_decay"],
+                             criterion = params["criterion"],
+                             batch_size = params["batch_size"],
+                             optimizer__betas = params["optimizer__betas"],
+                             module = create_nn_module(params["input_nodes"], params["hidden_layers"], 
+                                                       params["hidden_nodes"], params["output_nodes"], params["percentage"]),
+                             max_epochs = params["max_epochs"],
+                             callbacks=[skorch.callbacks.EarlyStopping(patience=params["patience"])],
+                             device = params["device"],
+                             optimizer = params["optimizer"]
+                            )
+    init_module(rsg.module, params["weight_mode"], params["bias"])
         
-        Y_pred = rsg.predict(X_split_test.values.astype(np.float32))
-        rmse = cal_rmse(Y_pred, Y_split_test.values)  
-        rmse_list.append(rmse)
-        rmsle = cal_rmsle(Y_pred, Y_split_test.values)
-        rmsle_list.append(rmsle)
-    
-    rmse_sum = 0.0
-    rmsle_sum = 0.0
-    for i in range(0, len(rmse_list)):
-        #如果存在nan的时候需要将其进行替换否则无法排序hyperopt报错= =！
-        #当rmse_list(本身类型为float类型的变量)，下面的判断成立的时候rmse_list为nan
-        #只有极少数的情况下才会启用下面的判断咯
-        if(rmse_list[i] != rmse_list[i]):
-            rmse_list[i] = 99999999999.9
-        rmse_sum += rmse_list[i]
-        
-        if(rmsle_list[i] != rmsle_list[i]):
-            rmsle_list[i] = 99999999999.9
-        rmsle_sum += rmsle_list[i]
-                
-    metric1 = rmse_sum/(len(rmse_list))
-    metric2 = rmsle_sum/(len(rmsle_list))
-     
-    print(metric1)
-    print(metric2)
-    print()    
-    #回归问题时，这里的方差应该越小越好吧
-    #分类问题时，这里的准确率应该越大越好吧
-    return metric2
+    #这里好像是无法使用skf的呀，不对只是新的skf需要其他设置啊，需要修改Y_train的shape咯
+    #skf = StratifiedKFold(Y_train, n_folds=5, shuffle=True, random_state=None)
+    #这里sklearn的均方误差是可以为负数的，我还以为是自己的代码出现了问题了呢
+    metric = cross_val_score(rsg, X_train_scaled.values.astype(np.float32), Y_train.values.astype(np.float32), cv=8, scoring="neg_mean_squared_log_error").mean()
+    #metric = cross_val_score(rsg, X_train_scaled.values.astype(np.float32), Y_train.values.astype(np.float32), cv=2, scoring="neg_mean_squared_error").mean()
+    print(metric)
+    return -metric
 
 #the objective function for bayesian hyperparameters optimization.
 #params is the current parameters of bayesian hyperparameters optimization.
@@ -631,7 +596,6 @@ def nn_f2(params):
     #回归问题时，这里的方差应该越小越好吧
     #分类问题时，这里的准确率应该越大越好吧
     return metric2
-
 
 #parse best hyperparameters in the bayesian hyperparameters optimization,
 #trials is the record of bayesian hyperparameters optimization,
@@ -1222,7 +1186,7 @@ def get_oof_noise_validate4(nodes, X_train_scaled, Y_train, X_test_scaled, n_fol
 #max_evals is the number of training,
 #I recommend using stacked_features_validate1 or stacked_features_validate2
 #the first one can save training time, 40 and 25 are fine choice for the last two function parameters.
-#the second one has less overfitting risk, 30 and 35 are fine choice for the last two function parameters.  
+#the second one has less overfitting risk, 30 and 15 are fine choice for the last two function parameters.  
 def stacked_features(nodes_list, X_train_scaled, Y_train, X_test_scaled, folds, max_evals):
     
     input_train = [] 
@@ -1715,35 +1679,21 @@ best_nodes = {"title":"stacked_house_prices",
 
 #run the following code for running environment test
 #reshape data for RMSELoss, or you will get error
-#split train data and validation data for best hyperparameters selection.
 Y_train_temp = Y_train.values.reshape(-1,1)
+Y_train_temp = np.log1p(Y_train_temp)
 Y_train = pd.DataFrame(data=Y_train_temp.astype(np.float32), columns=['SalePrice'])
-X_split_train, X_split_test, Y_split_train, Y_split_test = train_test_split(X_train_scaled, Y_train, test_size=0.14)
-
 start_time = datetime.datetime.now()
 trials = Trials()
 algo = partial(tpe.suggest, n_startup_jobs=10)
 #max_evals determine hyperparameters search times, bigger max_evals may lead to better results.
 best_params = fmin(nn_f1, space, algo=algo, max_evals=2, trials=trials)
-
 #save the result of the hyperopt(bayesian optimization) search.
 best_nodes = parse_nodes(trials, space_nodes)
 save_inter_params(trials, space_nodes, best_nodes, "house_price")
 
 #use 2 best nodes to create 2 neural network model for stacking.
-nodes_list = [best_nodes, best_nodes]
-#the following code can change the settings of the stacking process
-#you may use it as following when you need.
-#change settings except device or path is not recommended, cause you may lost best hyperparameters.
-#if you must use specific parameters, set it and start hyperparameters once more.
-#for item in nodes_list:
-#    item["device"] = "cpu" #set the device to train neural network, "cpu" means using cpu, "cuda" means using gpu.
-#    item["batch_size"] = 256 #set the batch_size of the neural network.
-#    item["path"] = "House_Prices_Prediction.csv" #set the file path of the prediction file.
-#neural network model stacking. I recommend using stacked_features_validate1 or stacked_features_validate2
-#the first one can save training time, 40 and 25 are fine choice for the last two function parameters.
-#the second one has less overfitting risk, 30 and 35 are fine choice for the last two function parameters.  
-stacked_train, stacked_test = stacked_features_validate1(nodes_list, X_train_scaled, Y_train, X_test_scaled, 2, 2)
+nodes_list = [best_nodes, best_nodes] 
+stacked_train, stacked_test = stacked_features_validate2(nodes_list, X_train_scaled, Y_train, X_test_scaled, 2, 2)
 #save the stacking intermediate result.
 save_stacked_dataset(stacked_train, stacked_test, "house_price")
 
@@ -1751,28 +1701,25 @@ save_stacked_dataset(stacked_train, stacked_test, "house_price")
 Y_train_temp = Y_train.values.flatten()
 Y_train = pd.DataFrame(data=Y_train_temp.astype(np.float32), columns=['SalePrice'])
 #use lasso to fit stacked_train/stacked_test and predict the result. 
-lasso_stacking_rscv_predict(nodes_list, data_test, stacked_train, Y_train, stacked_test, 600)
+lasso_stacking_rscv_expm1_predict(nodes_list, data_test, stacked_train, Y_train, stacked_test, 600)
 #print time cost
 end_time = datetime.datetime.now()
 print("time cost", (end_time - start_time))
 
 """
-#I recommand you use following code for neural network model training and prediction.
+#I recommend the following way for neural network model training and prediction.
+#cause in nn_f1 cross validation has been used to prevent overfitting.
 #use hyperopt(bayesian optimization) to search the best network structure.
 #have a look at hyperopt will help in understanding the following code.
-#split train data and validation data for best hyperparameters selection.
 Y_train_temp = Y_train.values.reshape(-1,1)
-#use log1p function to make Y_train fit the normal distribution, which is helpful for model training.
-#log1p and exp1m are inverse function to each other, log1p for training and exp1m for error estimation.
 Y_train_temp = np.log1p(Y_train_temp)
 Y_train = pd.DataFrame(data=Y_train_temp.astype(np.float32), columns=['SalePrice'])
-X_split_train, X_split_test, Y_split_train, Y_split_test = train_test_split(X_train_scaled, Y_train, test_size=0.14)
 
 start_time = datetime.datetime.now()
 trials = Trials()
 algo = partial(tpe.suggest, n_startup_jobs=10)
 #max_evals determine hyperparameters search times, bigger max_evals may lead to better results.
-best_params = fmin(nn_f2, space, algo=algo, max_evals=10800, trials=trials)
+best_params = fmin(nn_f1, space, algo=algo, max_evals=8800, trials=trials)
 
 #save the result of the hyperopt(bayesian optimization) search.
 best_nodes = parse_nodes(trials, space_nodes)
@@ -1790,8 +1737,8 @@ nodes_list = [best_nodes, best_nodes, best_nodes, best_nodes, best_nodes]
 #    item["path"] = "House_Prices_Prediction.csv" #set the file path of the prediction file.
 #neural network model stacking. I recommend using stacked_features_validate1 or stacked_features_validate2
 #the first one can save training time, 40 and 25 are fine choice for the last two function parameters.
-#the second one has less overfitting risk, 30 and 35 are fine choice for the last two function parameters.  
-stacked_train, stacked_test = stacked_features_validate1(nodes_list, X_train_scaled, Y_train, X_test_scaled, 40, 30)
+#the second one has less overfitting risk, 30 and 15 are fine choice for the last two function parameters.  
+stacked_train, stacked_test = stacked_features_validate1(nodes_list, X_train_scaled, Y_train, X_test_scaled, 40, 25)
 #save the stacking intermediate result.
 save_stacked_dataset(stacked_train, stacked_test, "house_price")
 
@@ -1806,19 +1753,19 @@ print("time cost", (end_time - start_time))
 """
 
 """
+#another way for neural network model training and prediction.
 #run the following code for neural network model training and prediction.
 #use hyperopt(bayesian optimization) to search the best network structure.
 #have a look at hyperopt will help in understanding the following code.
-#split train data and validation data for best hyperparameters selection.
 Y_train_temp = Y_train.values.reshape(-1,1)
+Y_train_temp = np.log1p(Y_train_temp)
 Y_train = pd.DataFrame(data=Y_train_temp.astype(np.float32), columns=['SalePrice'])
-X_split_train, X_split_test, Y_split_train, Y_split_test = train_test_split(X_train_scaled, Y_train, test_size=0.14)
 
 start_time = datetime.datetime.now()
 trials = Trials()
 algo = partial(tpe.suggest, n_startup_jobs=10)
 #max_evals determine hyperparameters search times, bigger max_evals may lead to better results.
-best_params = fmin(nn_f1, space, algo=algo, max_evals=2200, trials=trials)
+best_params = fmin(nn_f1, space, algo=algo, max_evals=8800, trials=trials)
 
 #save the result of the hyperopt(bayesian optimization) search.
 best_nodes = parse_nodes(trials, space_nodes)
@@ -1836,7 +1783,55 @@ nodes_list = [best_nodes, best_nodes, best_nodes, best_nodes, best_nodes]
 #    item["path"] = "House_Prices_Prediction.csv" #set the file path of the prediction file.
 #neural network model stacking. I recommend using stacked_features_validate1 or stacked_features_validate2
 #the first one can save training time, 40 and 25 are fine choice for the last two function parameters.
-#the second one has less overfitting risk, 30 and 35 are fine choice for the last two function parameters.  
+#the second one has less overfitting risk, 30 and 15 are fine choice for the last two function parameters.  
+stacked_train, stacked_test = stacked_features_validate2(nodes_list, X_train_scaled, Y_train, X_test_scaled, 30, 15)
+#save the stacking intermediate result.
+save_stacked_dataset(stacked_train, stacked_test, "house_price")
+
+#reshape data for RandomizedSearchCV, or you will get error
+Y_train_temp = Y_train.values.flatten()
+Y_train = pd.DataFrame(data=Y_train_temp.astype(np.float32), columns=['SalePrice'])
+#use lasso to fit stacked_train/stacked_test and predict the result. 
+lasso_stacking_rscv_expm1_predict(nodes_list, data_test, stacked_train, Y_train, stacked_test, 600)
+#print time cost
+end_time = datetime.datetime.now()
+print("time cost", (end_time - start_time))
+"""
+
+"""
+#another way for neural network model training and prediction.
+#run the following code for neural network model training and prediction.
+#use hyperopt(bayesian optimization) to search the best network structure.
+#have a look at hyperopt will help in understanding the following code.
+#split train data and validation data for best hyperparameters selection.
+Y_train_temp = Y_train.values.reshape(-1,1)
+Y_train_temp = np.log1p(Y_train_temp)
+Y_train = pd.DataFrame(data=Y_train_temp.astype(np.float32), columns=['SalePrice'])
+X_split_train, X_split_test, Y_split_train, Y_split_test = train_test_split(X_train_scaled, Y_train, test_size=0.14)
+
+start_time = datetime.datetime.now()
+trials = Trials()
+algo = partial(tpe.suggest, n_startup_jobs=10)
+#max_evals determine hyperparameters search times, bigger max_evals may lead to better results.
+best_params = fmin(nn_f2, space, algo=algo, max_evals=8800, trials=trials)
+
+#save the result of the hyperopt(bayesian optimization) search.
+best_nodes = parse_nodes(trials, space_nodes)
+save_inter_params(trials, space_nodes, best_nodes, "house_price")
+
+#use 5 best nodes to create 5 neural network model for stacking.
+nodes_list = [best_nodes, best_nodes, best_nodes, best_nodes, best_nodes]
+#the following code can change the settings of the stacking process
+#you may use it as following when you need.
+#change settings except device or path is not recommended, cause you may lost best hyperparameters.
+#if you must use specific parameters, set it and start hyperparameters once more.
+#for item in nodes_list:
+#    item["device"] = "cpu" #set the device to train neural network, "cpu" means using cpu, "cuda" means using gpu.
+#    item["batch_size"] = 256 #set the batch_size of the neural network.
+#    item["path"] = "House_Prices_Prediction.csv" #set the file path of the prediction file.
+#neural network model stacking. I recommend using stacked_features_validate1 or stacked_features_validate2
+#the first one can save training time, 40 and 25 are fine choice for the last two function parameters.
+#the second one has less overfitting risk, 30 and 15 are fine choice for the last two function parameters.  
 stacked_train, stacked_test = stacked_features_validate1(nodes_list, X_train_scaled, Y_train, X_test_scaled, 40, 25)
 #save the stacking intermediate result.
 save_stacked_dataset(stacked_train, stacked_test, "house_price")
@@ -1845,53 +1840,7 @@ save_stacked_dataset(stacked_train, stacked_test, "house_price")
 Y_train_temp = Y_train.values.flatten()
 Y_train = pd.DataFrame(data=Y_train_temp.astype(np.float32), columns=['SalePrice'])
 #use lasso to fit stacked_train/stacked_test and predict the result. 
-lasso_stacking_rscv_predict(nodes_list, data_test, stacked_train, Y_train, stacked_test, 600)
-#print time cost
-end_time = datetime.datetime.now()
-print("time cost", (end_time - start_time))
-"""
-
-"""
-#run the following code for neural network model training and prediction.
-#use hyperopt(bayesian optimization) to search the best network structure.
-#have a look at hyperopt will help in understanding the following code.
-#split train data and validation data for best hyperparameters selection.
-Y_train_temp = Y_train.values.reshape(-1,1)
-Y_train = pd.DataFrame(data=Y_train_temp.astype(np.float32), columns=['SalePrice'])
-X_split_train, X_split_test, Y_split_train, Y_split_test = train_test_split(X_train_scaled, Y_train, test_size=0.14)
-
-start_time = datetime.datetime.now()
-trials = Trials()
-algo = partial(tpe.suggest, n_startup_jobs=10)
-#max_evals determine hyperparameters search times, bigger max_evals may lead to better results.
-best_params = fmin(nn_f1, space, algo=algo, max_evals=2200, trials=trials)
-
-#save the result of the hyperopt(bayesian optimization) search.
-best_nodes = parse_nodes(trials, space_nodes)
-save_inter_params(trials, space_nodes, best_nodes, "house_price")
-
-#use 5 best nodes to create 5 neural network model for stacking.
-nodes_list = [best_nodes, best_nodes, best_nodes, best_nodes, best_nodes]
-#the following code can change the settings of the stacking process
-#you may use it as following when you need.
-#change settings except device or path is not recommended, cause you may lost best hyperparameters.
-#if you must use specific parameters, set it and start hyperparameters once more.
-#for item in nodes_list:
-#    item["device"] = "cpu" #set the device to train neural network, "cpu" means using cpu, "cuda" means using gpu.
-#    item["batch_size"] = 256 #set the batch_size of the neural network.
-#    item["path"] = "House_Prices_Prediction.csv" #set the file path of the prediction file.
-#neural network model stacking. I recommend using stacked_features_validate1 or stacked_features_validate2
-#the first one can save training time, 40 and 25 are fine choice for the last two function parameters.
-#the second one has less overfitting risk, 30 and 35 are fine choice for the last two function parameters.  
-stacked_train, stacked_test = stacked_features_validate2(nodes_list, X_train_scaled, Y_train, X_test_scaled, 30, 35)
-#save the stacking intermediate result.
-save_stacked_dataset(stacked_train, stacked_test, "house_price")
-
-#reshape data for RandomizedSearchCV, or you will get error
-Y_train_temp = Y_train.values.flatten()
-Y_train = pd.DataFrame(data=Y_train_temp.astype(np.float32), columns=['SalePrice'])
-#use lasso to fit stacked_train/stacked_test and predict the result. 
-lasso_stacking_rscv_predict(nodes_list, data_test, stacked_train, Y_train, stacked_test, 600)
+lasso_stacking_rscv_expm1_predict(nodes_list, data_test, stacked_train, Y_train, stacked_test, 600)
 #print time cost
 end_time = datetime.datetime.now()
 print("time cost", (end_time - start_time))
