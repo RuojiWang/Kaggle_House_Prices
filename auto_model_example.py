@@ -1455,7 +1455,7 @@ def lasso_stacking_rscv_predict(nodes_list, data_test, stacked_train, Y_train, s
                   "normalize": [True, False],
                   "positive": [True, False],
                   }
-    random_search = RandomizedSearchCV(rsg, param_distributions=param_dist, n_iter=max_evals)#,scoring ="mother_fucker" #,scoring ="mean_squared_error" #, scoring="neg_mean_squared_error")
+    random_search = RandomizedSearchCV(rsg, param_distributions=param_dist, n_iter=max_evals, cv=10)#,scoring ="mother_fucker" #,scoring ="mean_squared_error" #, scoring="neg_mean_squared_error")
     random_search.fit(stacked_train, Y_train)
     best_score = random_search.best_estimator_.score(stacked_train, Y_train)
     #RandomizedSearchCV的fit和score返回的大概就是下面的结果
@@ -1504,7 +1504,7 @@ def lasso_stacking_rscv_expm1_predict(nodes_list, data_test, stacked_train, Y_tr
                   "normalize": [True, False],
                   "positive": [True, False],
                   }
-    random_search = RandomizedSearchCV(rsg, param_distributions=param_dist, n_iter=max_evals)#,scoring ="mother_fucker" #,scoring ="mean_squared_error" #, scoring="neg_mean_squared_error")
+    random_search = RandomizedSearchCV(rsg, param_distributions=param_dist, n_iter=max_evals, cv=10)#,scoring ="mother_fucker" #,scoring ="mean_squared_error" #, scoring="neg_mean_squared_error")
     random_search.fit(stacked_train, Y_train)
     best_score = random_search.best_estimator_.score(stacked_train, Y_train)
     #RandomizedSearchCV的fit和score返回的大概就是下面的结果
