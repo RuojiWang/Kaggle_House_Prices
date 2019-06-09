@@ -1448,7 +1448,7 @@ def lasso_stacking_rscv_predict(nodes_list, data_test, stacked_train, Y_train, s
     #Lasso回归的损失函数优化方法常用的有两种，坐标轴下降法和最小角回归法。
     #LassoLars类采用的是最小角回归法，前面讲到的Lasso类采用的是坐标轴下降法。
     #Lasso加上RandomizedSearchCV，基本上就大于LassoCV的，毕竟后者只是CV别个参数呢
-    rsg = Lasso(max_iter=8000, tol=0.01)
+    rsg = Lasso(max_iter=8000, tol=0.01, random_state=42)
     #这边的参数我觉得还是有必要进行这样的设置的，才能够比较好的表示
     param_dist = {"alpha": np.logspace(-3, 5, 100),
                   "fit_intercept": [True, False],
@@ -1497,7 +1497,7 @@ def lasso_stacking_rscv_expm1_predict(nodes_list, data_test, stacked_train, Y_tr
     #Lasso回归的损失函数优化方法常用的有两种，坐标轴下降法和最小角回归法。
     #LassoLars类采用的是最小角回归法，前面讲到的Lasso类采用的是坐标轴下降法。
     #Lasso加上RandomizedSearchCV，基本上就大于LassoCV的，毕竟后者只是CV别个参数呢
-    rsg = Lasso(max_iter=8000, tol=0.01)
+    rsg = Lasso(max_iter=8000, tol=0.01, random_state=42)
     #这边的参数我觉得还是有必要进行这样的设置的，才能够比较好的表示
     param_dist = {"alpha": np.logspace(-3, 5, 100),
                   "fit_intercept": [True, False],
