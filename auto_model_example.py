@@ -344,7 +344,7 @@ def create_nn_module(input_nodes, hidden_layers, hidden_nodes, output_nodes, per
 #use kaiming_uniform_ to init weight and default bias,
 #use kaiming_uniform_ to init weight and bias,
 #use kaiming_uniform_ to init weight and use the value of the bias to constant init bias,
-def init_module(rsg, weight_mode, bias):
+def init_nn_module(rsg, weight_mode, bias):
 
     for layer in rsg.modules():
         #我本来想单独处理nn.Linear nn.Conv2d等
@@ -509,7 +509,7 @@ def nn_f1(params):
                              device = params["device"],
                              optimizer = params["optimizer"]
                             )
-    init_module(rsg.module, params["weight_mode"], params["bias"])
+    init_nn_module(rsg.module, params["weight_mode"], params["bias"])
         
     #这里好像是无法使用skf的呀，不对只是新的skf需要其他设置啊，需要修改Y_train的shape咯
     #skf = StratifiedKFold(Y_train, n_folds=5, shuffle=True, random_state=None)
@@ -557,7 +557,7 @@ def nn_f2(params):
                                   device = params["device"],
                                   optimizer = params["optimizer"]
                                   )
-        init_module(rsg.module, params["weight_mode"], params["bias"])
+        init_nn_module(rsg.module, params["weight_mode"], params["bias"])
         
         #Y_temp = Y_split_train.values.reshape(Y_split_train.shape[0])
         #rsg.fit(X_split_train.values.astype(np.float32), Y_split_train.values.astype(np.float32))
@@ -701,7 +701,7 @@ def train_nn_model(nodes, X_train_scaled, Y_train, max_evals=10):
                                   device = nodes["device"],
                                   optimizer = nodes["optimizer"]
                                   )
-        init_module(rsg.module, nodes["weight_mode"], nodes["bias"])
+        init_nn_module(rsg.module, nodes["weight_mode"], nodes["bias"])
         rsg.fit(X_train_scaled.astype(np.float32), Y_train.astype(np.float32))
             
         metric = cal_nnrsg_rmse(rsg, X_train_scaled, Y_train)
@@ -734,7 +734,7 @@ def train_nn_model_validate1(nodes, X_train_scaled, Y_train, max_evals=10):
                                   device = nodes["device"],
                                   optimizer = nodes["optimizer"]
                                   )
-        init_module(rsg.module, nodes["weight_mode"], nodes["bias"])
+        init_nn_module(rsg.module, nodes["weight_mode"], nodes["bias"])
         rsg.fit(X_split_train.astype(np.float32), Y_split_train.astype(np.float32))
             
         #Y_pred = rsg.predict(X_split_test.astype(np.float32))
@@ -765,7 +765,7 @@ def train_nn_model_validate2(nodes, X_train_scaled, Y_train, max_evals=10):
                                   device = nodes["device"],
                                   optimizer = nodes["optimizer"]
                                   )
-        init_module(rsg.module, nodes["weight_mode"], nodes["bias"])
+        init_nn_module(rsg.module, nodes["weight_mode"], nodes["bias"])
         
         #这里好像是无法使用skf的呀，不对只是新的skf需要其他设置啊，需要修改Y_train的shape咯
         #skf = StratifiedKFold(Y_train, n_folds=5, shuffle=True, random_state=None)
@@ -801,7 +801,7 @@ def train_nn_model_noise_validate1(nodes, X_train_scaled, Y_train, max_evals=10)
                                   device = nodes["device"],
                                   optimizer = nodes["optimizer"]
                                   )
-        init_module(rsg.module, nodes["weight_mode"], nodes["bias"])
+        init_nn_module(rsg.module, nodes["weight_mode"], nodes["bias"])
         rsg.fit(X_split_train.astype(np.float32), Y_split_train.astype(np.float32))
             
         metric = cal_nnrsg_rmse(rsg, X_split_test, Y_split_test)
@@ -832,7 +832,7 @@ def train_nn_model_noise_validate2(nodes, X_train_scaled, Y_train, max_evals=10)
                                   device = nodes["device"],
                                   optimizer = nodes["optimizer"]
                                   )
-        init_module(rsg.module, nodes["weight_mode"], nodes["bias"])
+        init_nn_module(rsg.module, nodes["weight_mode"], nodes["bias"])
         
         X_noise_train, Y_noise_train = noise_augment_ndarray_data(nodes["mean"], nodes["std"], X_split_train, Y_split_train, columns=[])#columns=[i for i in range(1, 19)])
         
@@ -870,7 +870,7 @@ def train_nn_model_noise_validate3(nodes, X_train_scaled, Y_train, max_evals=10)
                                   device = nodes["device"],
                                   optimizer = nodes["optimizer"]
                                   )
-        init_module(rsg.module, nodes["weight_mode"], nodes["bias"])
+        init_nn_module(rsg.module, nodes["weight_mode"], nodes["bias"])
                 
         metric = cross_val_score(rsg, X_noise_train.astype(np.float32), Y_noise_train.astype(np.float32), cv=5, scoring="mean_squared_log_error").mean()
         print(metric)
@@ -902,7 +902,7 @@ def train_nn_model_noise_validate4(nodes, X_train_scaled, Y_train, max_evals=10)
                                   device = nodes["device"],
                                   optimizer = nodes["optimizer"]
                                   )
-        init_module(rsg.module, nodes["weight_mode"], nodes["bias"])
+        init_nn_module(rsg.module, nodes["weight_mode"], nodes["bias"])
                 
         #这边的折数由5折修改为10折吧，这样子的话应该更加能够表示出稳定性吧
         #skf = StratifiedKFold(Y_noise_train, n_folds=10, shuffle=True, random_state=None)
